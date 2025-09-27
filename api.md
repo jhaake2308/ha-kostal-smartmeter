@@ -181,6 +181,35 @@
     }
     ```
 
+## Health-Check Benachrichtigungen – API Anfrage
+- **Kurzbeschreibung:** Liefert eine Liste von System-/Update-Benachrichtigungen (z. B. Firmware-Erfolg/Fehlschlag) des Geräts.  
+- **Methode:** GET  
+- **Pfad:** `/api/health-check/notifications`  
+- **Header:**  
+  `Authorization: Bearer <token>`
+
+- **Response:**
+```json
+[
+  {
+    "app": "updater",
+    "category": "info",
+    "message": "device-settings.notifications.fwupgradesuccess",
+    "msgtext": "<KSEM_FIRMWARE_DATEI_XYZ>.raucb",
+    "timestamp": 1725597542,
+    "read": true
+  },
+  {
+    "app": "evse-kostal",
+    "category": "error",
+    "message": "device-settings.notifications.fwupgradesuccess",
+    "msgtext": "<KSEM_FIRMWARE_DATEI_2_7_0>.raucb",
+    "timestamp": 1758860113,
+    "read": false
+  }
+]
+```
+
 ## E-Mobility Lade-Modus Konfiguration
 - Kurzbeschreibung: Konfiguration des Lade-Modus und zugehöriger Quotenparameter für das E-Mobility-System.  
 - **Methode:** PUT  
