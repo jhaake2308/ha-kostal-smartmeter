@@ -1,0 +1,42 @@
+jay@DESKTOP-QV4RGMH:~/enector-api$ python3 API_test-put-set-mode.py 
+Starte Tests für Gerät unter: ksem.haake.io
+
+--- Führe Token-Login durch ---
+Login erfolgreich!
+------------------------------
+
+--- Sende PUT-Request an: /api/e-mobility/config/chargemode ---
+Sende Payload:
+{ 'controlledby': 0,
+  'lastminchargingpowerquota': 0,
+  'lastminpvpowerquota': 0,
+  'mincharginpowerquota': 0,
+  'minpvpowerquota': 0,
+  'mode': 'hybrid'}
+Status-Code: 204
+Befehl erfolgreich gesendet!
+------------------------------
+
+Alle Tests abgeschlossen.
+jay@DESKTOP-QV4RGMH:~/enector-api$ touch .gitignore^C
+jay@DESKTOP-QV4RGMH:~/enector-api$ python3 API_test-put-set-mode.py 
+Starte Tests für Gerät unter: ksem.haake.io
+
+--- Führe Token-Login durch ---
+Login erfolgreich!
+------------------------------
+
+--- Sende PUT-Request an: /api/e-mobility/config/chargemode ---
+Sende Payload:
+{ 'controlledby': 0,
+  'lastminchargingpowerquota': 0,
+  'lastminpvpowerquota': 0,
+  'mincharginpowerquota': 0,
+  'minpvpowerquota': 0,
+  'mode': 'grid'}
+Status-Code: 204
+Befehl erfolgreich gesendet!
+------------------------------
+
+Alle Tests abgeschlossen.
+jay@DESKTOP-QV4RGMH:~/enector-api$ 

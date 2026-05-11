@@ -6,7 +6,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -- KONFIGURATION --
 DEVICE_IP = "ksem.haake.io"
-PASSWORD = "dein_passwort"  # <-- Dein Passwort eintragen
+PASSWORD = "***REMOVED***"  # <-- Dein Passwort eintragen
 # --------------------
 
 BASE_URL = f"https://{DEVICE_IP}"
@@ -70,10 +70,11 @@ if __name__ == "__main__":
         # Test 1: Setze den Lademodus auf "hybrid" (das war der Wert im Trace)
         # Die alten Werte wie "sc_solar_photovoltaics_power_only" müssen wir ggf.
         # durch die neuen Werte ("hybrid", "grid", "lock" etc.) ersetzen.
-        set_charge_mode(s, "hybrid")
-
+        #set_charge_mode(s, "hybrid")
+# hybrid = solar plus mode
         # Test 2: Setze den Lademodus auf "grid" (gesehen im zweiten PUT des Traces)
         set_charge_mode(s, "grid")
+# grid = power mode
         
     else:
         print("!!! Authentifizierung fehlgeschlagen. Breche weitere Tests ab.")

@@ -5,7 +5,7 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 DEVICE_IP = "ksem.haake.io"
-PASSWORD = "dein_passwort"
+PASSWORD = "***REMOVED***"
 BASE_URL = f"https://{DEVICE_IP}"
 pp = pprint.PrettyPrinter(indent=2)
 
