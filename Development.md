@@ -99,7 +99,8 @@ lock    "lock mode"
 
 time    "time mode"
 
-Weitere Modi wie "lock" müssen noch zugeordnet werden. Die alten Werte (sc_solar_...) sind ungültig.
+Die alten Werte (sc_solar_...) sind ungültig.
+
 4. Implementierungs-Richtlinien für Home Assistant
 
     Die Implementierung muss asynchron erfolgen. Anstelle von requests ist die aiohttp-Bibliothek zu verwenden, die über homeassistant.helpers.aiohttp_client.async_get_clientsession verfügbar ist.
