@@ -87,9 +87,17 @@ Die Endpunkt-Struktur wurde ebenfalls überarbeitet.
 3. Daten-Mapping (Beispiele)
 
 Die Namen für die Lademodi haben sich geändert.
-Neuer API-Wert (mode)	Entsprechung (vom Benutzer beobachtet)
+Neuer API-Wert (mode)	Entsprechung (vom Benutzer beobachtet):
+
 hybrid	"Solar Plus Mode"
+
 grid	"Power Mode"
+
+pv      "Solar Pure mode"
+
+lock    "lock mode"
+
+time    "time mode"
 
 Weitere Modi wie "lock" müssen noch zugeordnet werden. Die alten Werte (sc_solar_...) sind ungültig.
 4. Implementierungs-Richtlinien für Home Assistant

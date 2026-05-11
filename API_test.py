@@ -1,9 +1,14 @@
 import requests
 import pprint
 import urllib3
+import os
+from dotenv import load_dotenv
 
 # Deaktiviert Warnungen für unsichere HTTPS-Anfragen
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Lade Umgebungsvariablen aus der secrets.env-Datei
+load_dotenv('secrets.env')
 
 # -- KONFIGURATION --
 DEVICE_IP = "ksem.haake.io"  # <-- IP-Adresse oder Hostname deines Geräts
@@ -14,7 +19,9 @@ DEVICE_IP = "ksem.haake.io"  # <-- IP-Adresse oder Hostname deines Geräts
 PRE_GENERATED_TOKEN = ""  # <--- HIER EINEN GÜLTIGEN TOKEN EINFÜGEN
 
 # OPTION 2: Passwort (wird nur verwendet, wenn PRE_GENERATED_TOKEN leer ist)
-PASSWORD = "dein_passwort"     # <-- Dein Passwort als Fallback
+#PASSWORD = "dein_passwort"     # <-- Dein Passwort als Fallback
+PASSWORD = os.getenv("KSEM_PASSWORD")  # <-- Passwort aus der .env-Datei
+
 # --------------------
 
 BASE_URL = f"https://{DEVICE_IP}"
