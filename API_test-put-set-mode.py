@@ -81,7 +81,7 @@ if __name__ == "__main__":
         #set_charge_mode(s, "hybrid")
 # hybrid = solar plus mode
         # Test 2: Setze den Lademodus auf "grid" (gesehen im zweiten PUT des Traces)
-        set_charge_mode(s, "grid")
+        set_charge_mode(s, "lock")
 # grid = power mode
         
     else:
