@@ -1,13 +1,21 @@
 import requests
 import pprint
 import urllib3
+import os
+from dotenv import load_dotenv
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -- KONFIGURATION --
+# Lade Umgebungsvariablen aus der secrets.env-Datei
+load_dotenv('secrets.env')
+
 DEVICE_IP = "ksem.haake.io"
-PASSWORD = "***REMOVED***"  # <-- Dein Passwort eintragen
+PASSWORD = os.getenv("KSEM_PASSWORD")  # <-- Passwort aus der .env-Datei
 # --------------------
+
+if not PASSWORD:
+    raise ValueError("KSEM_PASSWORD nicht in der secrets.env-Datei gefunden!")
 
 BASE_URL = f"https://{DEVICE_IP}"
 pp = pprint.PrettyPrinter(indent=2)
