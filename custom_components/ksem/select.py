@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from homeassistant.core import callback
 from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
@@ -162,6 +163,7 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
             )
         )
 
+    @callback
     def _handle_chargemode_push(self) -> None:
         """Wird direkt vom WS-Push aufgerufen – HA-State sofort aktualisieren."""
         self.async_write_ha_state()

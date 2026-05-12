@@ -1,4 +1,5 @@
 import logging
+from homeassistant.core import callback
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -147,6 +148,7 @@ class MinPvPowerQuota(_WBAvailableMixin, NumberEntity):
             )
         )
 
+    @callback
     def _handle_chargemode_push(self) -> None:
         """Quota-Wert aus WS-Daten übernehmen, wenn der KSEM ihn geändert hat."""
         chargemode = (
@@ -203,6 +205,7 @@ class MinChargingPowerQuota(_WBAvailableMixin, NumberEntity):
             )
         )
 
+    @callback
     def _handle_chargemode_push(self) -> None:
         """Quota-Wert aus WS-Daten übernehmen, wenn der KSEM ihn geändert hat."""
         chargemode = (
