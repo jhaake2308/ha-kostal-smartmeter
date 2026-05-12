@@ -5,6 +5,7 @@ from typing import Optional
 
 from aiohttp import WSMsgType
 from homeassistant.components.select import SelectEntity
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
