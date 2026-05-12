@@ -10,7 +10,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Lade Umgebungsvariablen aus der secrets.env-Datei
 load_dotenv('secrets.env')
 
-DEVICE_IP = "ksem.haake.io"
+DEVICE_IP = os.getenv("KSEM_SERVER")  # <-- IP-Adresse oder Hostname deines Geräts
 PASSWORD = os.getenv("KSEM_PASSWORD")  # <-- Passwort aus der .env-Datei
 # --------------------
 

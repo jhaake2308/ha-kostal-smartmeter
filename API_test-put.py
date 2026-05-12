@@ -1,11 +1,14 @@
-# ... (der obere Teil des Skripts mit Konfiguration, get_api_token etc. bleibt gleich) ...
 import requests
 import pprint
 import urllib3
+import os
+from dotenv import load_dotenv
 
+# ... (Konfiguration und get_api_token Funktion bleiben identisch wie im letzten Skript) ...
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-DEVICE_IP = "ksem.haake.io"
-PASSWORD = "***REMOVED***"
+load_dotenv('secrets.env')
+DEVICE_IP = os.getenv("KSEM_SERVER")  # <-- IP-Adresse oder Hostname deines Geräts
+PASSWORD = os.getenv("KSEM_PASSWORD")  # <-- Passwort aus der .env-Datei
 BASE_URL = f"https://{DEVICE_IP}"
 pp = pprint.PrettyPrinter(indent=2)
 

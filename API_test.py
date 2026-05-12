@@ -11,7 +11,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 load_dotenv('secrets.env')
 
 # -- KONFIGURATION --
-DEVICE_IP = "ksem.haake.io"  # <-- IP-Adresse oder Hostname deines Geräts
+DEVICE_IP = os.getenv("KSEM_SERVER")  # <-- IP-Adresse oder Hostname deines Geräts
 
 # OPTION 1: Manueller Token
 # Fülle diesen String, um den Login zu überspringen und diesen Token direkt zu verwenden.
