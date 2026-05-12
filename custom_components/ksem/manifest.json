@@ -1,14 +1,12 @@
 {
   "domain": "ksem",
   "name": "Kostal Smartmeter",
-  "version": "0.4.0",
+  "version": "1.0.0-alpha.1",
   "documentation": "https://github.com/MeisterTR/ha-kostal-smartmeter",
   "issue_tracker": "https://github.com/MeisterTR/ha-kostal-smartmeter/issues",
   "dependencies": [],
   "codeowners": ["@MeisterTR"],
   "config_flow": true,
   "iot_class": "local_polling",
-  "requirements": [
-    "pymodbus>=3.7.0"
-  ]
+  "requirements": []
 }

@@ -6,9 +6,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from .const import DOMAIN
 from homeassistant.helpers.entity import EntityCategory
-from .modbus_map import SENSOR_DEFINITIONS
-from homeassistant.components.sensor import SensorDeviceClass
-from .helper import first_evse_from_coordinator  # <- Helper aus helper.py
+from .helper import first_evse_from_coordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +28,6 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     smart = data["smart_coordinator"]
     wallbox = data.get("wallbox_coordinator")  # kann None sein
-    modbus = data["modbus_coordinator"]
     device_info = data["device_info"]
     serial = data["serial"]
 
@@ -69,17 +66,7 @@ async def async_setup_entry(
         )
         wb_entities_created = True
 
-    # 3) OBIS/Modbus-Entities (für device:"wallbox" nur, wenn WB-DeviceInfo existiert)
-    obis_entities = []
-    for addr, spec in SENSOR_DEFINITIONS.items():
-        info = (
-            wallbox_device_info
-            if spec.get("device") == "wallbox" and wallbox_device_info
-            else device_info
-        )
-        obis_entities.append(KsemObisModbusSensor(modbus, addr, spec, info))
-
-    # 4) Optionaler WB-Leistungssensor: nur, wenn Coordinator existiert
+    # 3) Optionaler WB-Leistungssensor: nur, wenn Coordinator existiert
     more_entities = []
     if wallbox:
         evse_power_entity = KsemEvseAvailablePowerSensor(
@@ -87,10 +74,48 @@ async def async_setup_entry(
         )
         more_entities.append(evse_power_entity)
 
+        # Add new sensors for EV parameters
+        ev_param_sensors = [
+            KsemEvParameterSensor(
+                wallbox,
+                wallbox_device_info or device_info,
+                "Min Current",
+                "min_current",
+                "A",
+                1000,
+            ),
+            KsemEvParameterSensor(
+                wallbox,
+                wallbox_device_info or device_info,
+                "Max Current",
+                "max_current",
+                "A",
+                1000,
+            ),
+            KsemEvParameterSensor(
+                wallbox,
+                wallbox_device_info or device_info,
+                "Phases Used",
+                "phases_used",
+                None,
+                1,
+                is_dict=True,
+            ),
+            KsemEvParameterSensor(
+                wallbox,
+                wallbox_device_info or device_info,
+                "Probing Successful",
+                "probing_successful",
+                None,
+                1,
+            ),
+        ]
+        more_entities.extend(ev_param_sensors)
+
     hass.data[DOMAIN][entry.entry_id]["wallbox_device_info"] = wallbox_device_info
-    # 5) jetzt alles hinzufügen
+    # 4) jetzt alles hinzufügen
     async_add_entities(
-        smartmeter_entities + wallbox_entities + obis_entities + more_entities
+        smartmeter_entities + wallbox_entities + more_entities
     )
 
     # 6) Falls beim Start noch keine WB da war: später automatisch nachziehen
@@ -177,6 +202,56 @@ class KsemEvseAvailablePowerSensor(CoordinatorEntity, SensorEntity):
         return attrs
 
 
+class KsemEvParameterSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for EV parameters from the /api/e-mobility/evparameterlist endpoint."""
+
+    def __init__(
+        self,
+        coordinator,
+        device_info,
+        name: str,
+        data_key: str,
+        unit: str | None,
+        divider: int = 1,
+        is_dict: bool = False,
+    ):
+        super().__init__(coordinator)
+        self._attr_name = f"EV {name}"
+        self._attr_unique_id = f"ksem_ev_{data_key.lower()}"
+        self._attr_device_info = device_info
+        self._attr_native_unit_of_measurement = unit
+        self._attr_state_class = SensorStateClass.MEASUREMENT if unit else None
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+        self._data_key = data_key
+        self._divider = divider
+        self._is_dict = is_dict
+
+    @property
+    def native_value(self):
+        ev_params = (self.coordinator.data or {}).get("ev_params", {})
+        if not ev_params:
+            return None
+
+        # The key is the EVSE ID, get the first one
+        first_ev_id = next(iter(ev_params), None)
+        if not first_ev_id:
+            return None
+
+        value = ev_params[first_ev_id].get(self._data_key)
+
+        if value is None:
+            return None
+
+        if self._is_dict:
+            return str(value)
+
+        if isinstance(value, (int, float)) and self._divider != 1:
+            return value / self._divider
+
+        return value
+
+
 class KsemSmartmeterSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, key, name, unit, device_info, serial):
         super().__init__(coordinator)
@@ -192,78 +267,3 @@ class KsemSmartmeterSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         return self.coordinator.data.get(self._sensor_key)
 
-
-class KsemWallboxSensor(SensorEntity):
-    def __init__(self, uuid, name, model, serial, version, value):
-        self._attr_name = name
-        self._attr_unique_id = f"{uuid}_state"
-        self._uuid = uuid
-        self._model = model
-        self._serial = serial
-        self._version = version
-        self._state = value
-
-    @property
-    def state(self):
-        return self._state
-
-    @property
-    def unique_id(self):
-        return self._attr_unique_id
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return {
-            "identifiers": {(DOMAIN, f"wallbox-{self._uuid}")},
-            "name": f"Wallbox {self._uuid[:6]}",
-            "model": self._model,
-            "serial_number": self._serial,
-            "sw_version": self._version,
-            "manufacturer": "Kostal",
-        }
-
-
-class KsemObisModbusSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, address, spec, device_info):
-        super().__init__(coordinator)
-        self._address = address
-        self._key = spec["name"]
-        self._mapping = spec.get("map")
-        self._attr_name = f"{spec['name']}"
-        self._attr_native_unit_of_measurement = spec["unit"]
-        # ENUM-Erkennung
-        if spec.get("device_class") == "enum":
-            self._attr_device_class = SensorDeviceClass.ENUM
-            self._attr_options = list(self._mapping.values()) if self._mapping else []
-            self._attr_native_unit_of_measurement = None
-            self._attr_state_class = None
-        else:
-            self._attr_device_class = spec.get("device_class")
-            if spec.get("device_class") == "energy" or spec.get("unit") in (
-                "Wh",
-                "kWh",
-                "VAh",
-                "varh",
-            ):
-                self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            elif spec.get("device_class") in (
-                "power",
-                "voltage",
-                "current",
-                "battery",
-                "temperature",
-                "frequency",
-            ):
-                self._attr_state_class = SensorStateClass.MEASUREMENT
-            else:
-                self._attr_state_class = None
-        ident = next(iter(device_info["identifiers"]))[1]
-        self._attr_unique_id = f"{ident}_obis_{address}"
-        self._attr_device_info = device_info
-
-    @property
-    def native_value(self):
-        val = self.coordinator.data.get(self._key)
-        if self._mapping:
-            return self._mapping.get(int(val), f"Unbekannt ({val})")
-        return val

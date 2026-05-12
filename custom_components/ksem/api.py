@@ -126,41 +126,33 @@ class KsemClient:
         _LOGGER.info("Hole Wallbox-Status")
         return await self._get("/api/e-mobility/state")
 
+    async def get_ev_parameters(self):
+        """Liefert die Parameter des angeschlossenen E-Fahrzeugs."""
+        _LOGGER.info("Hole EV-Parameter")
+        return await self._get("/api/e-mobility/evparameterlist")
+
     async def set_charge_mode(
         self,
-        mode: str | None = None,
-        mincharginpowerquota: int | None = None,
-        minpvpowerquota: int | None = None,
-        entry_id=None,
+        mode: str,
+        mincharginpowerquota: int = 100,
+        minpvpowerquota: int = 30,
     ):
-        session = async_get_clientsession(self.hass)
-        await self._auth(session)
-        url = f"http://{self.host}/api/e-mobility/config/chargemode"
-
-        # Hole aktuelle Werte aus dem WebSocket-Cache
-        cache = (
-            self.hass.data.get("ksem", {}).get(entry_id, {}).get("last_chargemode", {})
-        )
-
+        """Setzt den Lademodus der Wallbox."""
         payload = {
-            "mode": mode or cache.get("mode", "lock"),
-            "mincharginpowerquota": mincharginpowerquota
-            if mincharginpowerquota is not None
-            else cache.get("mincharginpowerquota", 100),
-            "minpvpowerquota": minpvpowerquota
-            if minpvpowerquota is not None
-            else cache.get("minpvpowerquota", 30),
+            "mode": mode,
+            "mincharginpowerquota": mincharginpowerquota,
+            "minpvpowerquota": minpvpowerquota,
+            "lastminchargingpowerquota": mincharginpowerquota,
+            "lastminpvpowerquota": minpvpowerquota,
+            "controlledby": 0,
         }
 
-        # Füge automatisch die letzten Werte und controlledby=0 hinzu
-        payload["lastminchargingpowerquota"] = payload["mincharginpowerquota"]
-        payload["lastminpvpowerquota"] = payload["minpvpowerquota"]
-        payload["controlledby"] = 0
+        _LOGGER.debug("Setze Lademodus: %s", payload)
 
-        headers = bearer_header(self.token.access_token)
-        _LOGGER.debug("PUT %s - Payload: %s", url, payload)
-        resp = await session.put(url, headers=headers, json=payload)
-        resp.raise_for_status()
+        await self._put(
+            "/api/e-mobility/config/chargemode",
+            json=payload,
+        )
 
     async def get_phase_switching(self):
         return await self._get("/api/e-mobility/config/phaseswitching")
