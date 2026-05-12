@@ -40,7 +40,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 hass=hass,
                 entry_id=entry.entry_id,
                 client=client,
-                token=None,  # Token wird im WS-Loop frisch geholt
                 coordinator=coordinator,
             )
         )

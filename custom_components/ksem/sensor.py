@@ -61,9 +61,6 @@ async def async_setup_entry(
             manufacturer="Kostal",
         )
 
-        wallbox_entities.append(
-            KsemWallboxSensor(uuid, f"{label} State", model, wb_serial, version, state)
-        )
         wb_entities_created = True
 
     # 3) Optionaler WB-Leistungssensor: nur, wenn Coordinator existiert
