@@ -2,10 +2,11 @@
 
 WIE IMNMER GILT, ERST REDEN, DANN CODEN!
 
-## Status Quo (v1.0.0-alpha.4)
+## Status Quo (v1.0.0-alpha.6)
 
 Die Integration nutzt eine Kombination aus REST-Polling (Coordinator) und einer
 persistenten WebSocket-Verbindung für Echtzeit-Push-Updates des Lademodus.
+Beide Richtungen sind getestet und funktionieren:
 
 ### Architektur
 
@@ -41,6 +42,7 @@ persistenten WebSocket-Verbindung für Echtzeit-Push-Updates des Lademodus.
 3. **`select.py`**: Ungültiger Parameter `token=None` entfernt; `current_option` liest jetzt echte WS-Daten; Dispatcher-Listener für sofortigen Push registriert.
 4. **`number.py`**: `set_charge_mode()` mit ungültigen Argumenten korrigiert; Dispatcher-Listener für Quota-Sync via Push hinzugefügt.
 5. **`sensor.py`**: Referenz auf nicht definierte Klasse `KsemWallboxSensor` entfernt.
+6. **`select.py` / `number.py`** *(alpha.6)*: `@callback`-Decorator auf `_handle_chargemode_push` – `async_write_ha_state()` wurde aus SyncWorker-Threads aufgerufen und löste `RuntimeError` aus.
 
 ### Bekannte Einschränkungen
 
