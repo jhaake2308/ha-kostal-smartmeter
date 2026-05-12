@@ -1,103 +1,43 @@
-Zusammenfassung für KI-Agenten: Refactoring einer Kostal KSEM Home Assistant Integration
+# Entwicklungs-Zusammenfassung: Refactoring der Kostal KSEM Integration
 
-Kontext:
-Die bestehende Home Assistant Custom Component zur Steuerung eines Kostal Smart Energy Meter (KSEM) und einer ENECTOR Wallbox ist nach einem Firmware-Update des Geräts nicht mehr funktionsfähig. Die lokale REST-API des Geräts hat sich grundlegend geändert. Der alte Code, der von einer einfachen API (/api/v1/...) mit HTTP Basic Authentication und Modbus ausging, ist obsolet.
+## Status Quo (nach Refactoring)
 
-Ziel:
-Refactoring des Python-Codes (insbesondere der api.py-Klasse), um die neue, Token-basierte, asynchrone API zu implementieren.
-1. Authentifizierungs-Mechanismus
+Die Home Assistant Custom Component zur Steuerung eines Kostal Smart Energy Meter (KSEM) wurde grundlegend überarbeitet, um mit der neuen Geräte-Firmware und deren API kompatibel zu sein.
 
-Die Authentifizierung erfolgt nicht mehr über Basic Auth, sondern über einen Token-basierten, zweistufigen Login-Prozess, der an eine HTTP-Session gebunden ist.
+### Kernänderungen:
 
-    Schritt 1: Token anfordern
+1.  **API-Client (`api.py`):**
+    *   Die gesamte Kommunikation wurde von Modbus auf die neue, tokenbasierte HTTP-REST-API umgestellt.
+    *   Der Authentifizierungs-Flow (Anfordern eines Bearer-Tokens) wurde implementiert und wird pro Session ausgeführt.
+    *   Alle API-Aufrufe sind asynchron und nutzen die von Home Assistant bereitgestellte `aiohttp`-Session.
 
-        Methode: POST
+2.  **Daten-Aktualisierung (`__init__.py`):**
+    *   Die Integration verwendet nun das `DataUpdateCoordinator`-Pattern von Home Assistant.
+    *   Zwei Koordinatoren polen die API in regelmäßigen Abständen:
+        *   `data_coordinator`: Holt allgemeine Gerätedaten.
+        *   `wallbox_coordinator`: Holt spezifische Daten der Wallbox, insbesondere die dynamischen Ladeparameter (`evparameterlist`).
+    *   Alle Entitäten (Sensoren, Schalter, etc.) sind `CoordinatorEntity`-Instanzen und beziehen ihre Zustände von diesen Koordinatoren. Dies sorgt für Stabilität und Effizienz.
 
-        Endpunkt: /api/web-login/token
+3.  **Entitäten:**
+    *   **Sensoren (`sensor.py`):** Alle Modbus-basierten Sensoren wurden entfernt. Neue Sensoren wurden hinzugefügt, die auf den Daten der HTTP-API basieren, z.B. für die minimal/maximal einstellbare Ladeleistung.
+    *   **Steuerung (`select.py`, `switch.py`):**
+        *   Die `KsemChargeModeSelect`-Entität wurde refaktoriert. Die instabile, eigene WebSocket-Implementierung wurde **vollständig entfernt**.
+        *   Die Auswahl des Lademodus erfolgt nun über einen `PUT`-Request an den `/api/e-mobility/config/chargemode`-Endpunkt.
+        *   Der aktuelle Zustand des Lademodus kann von der API nicht direkt ausgelesen werden und wird daher in der UI nicht mehr angezeigt. Dies ist eine bekannte Einschränkung der aktuellen API.
 
-        Header Content-Type: application/x-www-form-urlencoded
+4.  **Bereinigung:**
+    *   Alle Modbus-bezogenen Dateien und Code-Teile (`modbus_helper.py`, `modbus_map.py`) wurden entfernt.
+    *   Das Projekt ist nun eine reine HTTP-basierte Integration.
 
-        Payload (Form-Daten):
+### Wichtige API-Endpunkte im Einsatz:
 
-        grant_type: "password"
-        client_id: "emos"
-        client_secret: "56951025"
-        username: "admin"      // Wichtig: Der Benutzername ist ein fester Wert.
-        password: "[BENUTZER_PASSWORT]"
+*   `POST /api/web-login/token`: Authentifizierung.
+*   `GET /api/processdata/all`: Abruf aller Prozessdaten (Haupt-Datenquelle).
+*   `GET /api/e-mobility/evparameterlist`: Abruf der dynamischen Wallbox-Parameter.
+*   `PUT /api/e-mobility/config/chargemode`: Setzen des Lademodus.
+*   `PUT /api/e-mobility/configuration/phases`: Umschalten der Ladephasen.
+*   `PUT /api/kostal-energyflow/configuration`: Schalten der Batterienutzung.
 
-        Antwort (Response): Ein JSON-Objekt, das den Token enthält.
-
-        {
-          "access_token": "ey...",
-          "token_type": "Bearer",
-          "expires_in": 3600
-        }
-
-    Schritt 2: Authentifizierte Anfragen
-
-        Alle nachfolgenden Anfragen an die API müssen den erhaltenen Token im Authorization-Header als Bearer-Token enthalten.
-
-        Header-Format: Authorization: Bearer [access_token]
-
-        Wichtiger Hinweis: Die Authentifizierung ist an die HTTP-Session (und das zugehörige Cookie) gebunden, in der der Token angefordert wurde. Ein Token kann nicht auf eine neue Session übertragen werden. Der Login muss pro Session (d.h. pro Start der Integration) erfolgen.
-
-2. Wichtige API-Endpunkte und Methoden
-
-Die Endpunkt-Struktur wurde ebenfalls überarbeitet.
-
-    Schreiben/Ändern des Lademodus:
-
-        Methode: PUT
-
-        Endpunkt: /api/e-mobility/config/chargemode
-
-        Payload (JSON): Es muss ein vollständiges JSON-Objekt mit 6 Feldern gesendet werden. Nur das mode-Feld zu senden, resultiert in einem 400 Bad Request.
-
-        {
-          "mode": "[MODUS_NAME]",
-          "mincharginpowerquota": 0,
-          "minpvpowerquota": 0,
-          "lastminchargingpowerquota": 0,
-          "lastminpvpowerquota": 0,
-          "controlledby": 0
-        }
-
-    Lesen von Status- und Konfigurationsdaten:
-
-        Methode: GET
-
-        Verifizierte Endpunkte:
-
-            /api/device-settings: Allgemeine Geräteinformationen.
-
-            /api/device-settings/deviceusage: CPU- und Speicherauslastung.
-
-            /api/kostal-energyflow/configuration: Energiefluss-Konfiguration (enthält den Zustand des "Battery Usage"-Schalters).
-
-            /api/e-mobility/evselist: Listet verbundene Wallboxen und deren statische Parameter auf.
-
-            /api/e-mobility/evparameterlist: Listet dynamische Parameter der Wallboxen auf.
-
-        Hinweis: Der aktuelle Lademodus kann nicht per GET auf /api/e-mobility/config/chargemode gelesen werden (führt zu 405 Method Not Allowed). Der Zustand muss aus den Daten anderer Endpunkte (z.B. /api/kostal-energyflow/configuration oder WebSocket) abgeleitet werden.
-
-    Echtzeit-Daten (Optional/Fortgeschritten):
-
-        Die .har-Analyse hat gezeigt, dass die GUI WebSocket-Verbindungen (wss://...) für sofortige Updates verwendet, z.B. zu wss://.../api/data-transfer/ws/json/json/local/config/e-mobility/chargemode. Eine Implementierung via WebSockets ist eine Alternative zum ständigen Pollen der GET-Endpunkte.
-
-3. Daten-Mapping (Beispiele)
-
-Die Namen für die Lademodi haben sich geändert.
-Neuer API-Wert (mode)	Entsprechung (vom Benutzer beobachtet):
-
-hybrid	"Solar Plus Mode"
-
-grid	"Power Mode"
-
-pv      "Solar Pure mode"
-
-lock    "lock mode"
-
-time    "time mode"
 
 Die alten Werte (sc_solar_...) sind ungültig.
 
