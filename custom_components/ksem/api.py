@@ -1,16 +1,10 @@
+import json
 import logging
 import datetime
 from typing import Union
-from aiohttp import ClientResponse
+from aiohttp import ClientResponse, WSMsgType
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .helper import bearer_header
-from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorDeviceClass,
-    SensorStateClass,
-)
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -177,3 +171,40 @@ class KsemClient:
             headers={"Content-Type": "text/plain"},
             text_mode=True,
         )
+
+    async def async_listen_ws(self, callback) -> None:
+        """Verbindet sich mit dem Charge-Mode-WebSocket und ruft callback für jede Nachricht auf.
+
+        Baut eine persistente Verbindung zu
+        ws://<host>/api/data-transfer/ws/json/json/local/config/e-mobility/chargemode
+        auf und liefert das 'msg'-Dict jeder eingehenden JSON-Nachricht an callback.
+        Die Methode kehrt zurück, wenn die Verbindung geschlossen wird oder ein Fehler auftritt.
+        """
+        session = async_get_clientsession(self.hass)
+        if not self.token or datetime.datetime.now() > self.token.expire_date:
+            await self._auth(session)
+        url = (
+            f"ws://{self.host}"
+            "/api/data-transfer/ws/json/json/local/config/e-mobility/chargemode"
+        )
+        headers = bearer_header(self.token.access_token)
+        _LOGGER.debug("WebSocket verbinden: %s", url)
+        async with session.ws_connect(url, headers=headers, heartbeat=30) as ws:
+            await ws.send_str(f"Bearer {self.token.access_token}")
+            _LOGGER.debug("WebSocket Auth-Token gesendet")
+            async for msg in ws:
+                if msg.type == WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        payload = data.get("msg", data)
+                        _LOGGER.debug("WS-Nachricht: %s", payload)
+                        await callback(payload)
+                    except (json.JSONDecodeError, TypeError) as err:
+                        _LOGGER.warning(
+                            "Ungültiges JSON vom WebSocket: %s – %s", msg.data, err
+                        )
+                elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE):
+                    _LOGGER.warning(
+                        "WebSocket geschlossen/Fehler: %s", ws.exception()
+                    )
+                    break

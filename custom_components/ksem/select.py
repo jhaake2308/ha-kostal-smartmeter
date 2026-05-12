@@ -1,15 +1,12 @@
-import asyncio
-import json
 import logging
 from typing import Optional
 
-from aiohttp import WSMsgType
 from homeassistant.components.select import SelectEntity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, SIGNAL_CHARGEMODE_UPDATE
 from .helper import first_evse_from_coordinator  # Single-WB Helfer
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,7 +65,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     hass=hass,
                     entry_id=entry.entry_id,
                     client=client,
-                    token=None,
                     coordinator=coordinator,
                 ),
                 KsemPhaseSwitchSelect(
@@ -145,12 +141,30 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
             )
 
     @property
-    def current_option(self) -> str | None:
-        """Return the currently selected option."""
-        # The charge mode is not available via a GET endpoint.
-        # We will implement reading this via WebSocket later if needed.
-        # For now, we leave it as unknown.
-        return None
+    def current_option(self) -> Optional[str]:
+        """Aktuellen Lademodus aus den via WebSocket empfangenen Daten lesen."""
+        chargemode = (
+            self._hass.data.get(DOMAIN, {})
+            .get(self._entry_id, {})
+            .get("chargemode_data", {})
+        )
+        mode = chargemode.get("mode")
+        return MODE_MAP.get(mode)
+
+    async def async_added_to_hass(self) -> None:
+        """Dispatcher-Listener registrieren, sobald Entity in HA eingebunden ist."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_CHARGEMODE_UPDATE.format(self._entry_id),
+                self._handle_chargemode_push,
+            )
+        )
+
+    def _handle_chargemode_push(self) -> None:
+        """Wird direkt vom WS-Push aufgerufen – HA-State sofort aktualisieren."""
+        self.async_write_ha_state()
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""

@@ -1,7 +1,8 @@
 import logging
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.device_registry import DeviceInfo
-from .const import DOMAIN
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from .const import DOMAIN, SIGNAL_CHARGEMODE_UPDATE
 from .helper import first_evse_from_coordinator  # <— Single-WB Helfer
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         wb_device_info = device_info_from_sensor or _build_wb_device_info(wb)
 
         entity1 = MinPvPowerQuota(
+            hass=hass,
             client=client,
             device_info=wb_device_info,
             initial=last_ws_data.get("minpvpowerquota", 0),
@@ -54,6 +56,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             wallbox_coord=wallbox_coord,
         )
         entity2 = MinChargingPowerQuota(
+            hass=hass,
             client=client,
             device_info=wb_device_info,
             initial=last_ws_data.get("mincharginpowerquota", 0),
@@ -96,9 +99,10 @@ class _WBAvailableMixin:
 
 class MinPvPowerQuota(_WBAvailableMixin, NumberEntity):
     def __init__(
-        self, client, device_info: DeviceInfo, initial, entry_id, wallbox_coord
+        self, hass, client, device_info: DeviceInfo, initial, entry_id, wallbox_coord
     ):
         _WBAvailableMixin.__init__(self, wallbox_coord)
+        self._hass = hass
         self._entry_id = entry_id
         self._client = client
         self._attr_name = "Min PV Power"
@@ -114,11 +118,17 @@ class MinPvPowerQuota(_WBAvailableMixin, NumberEntity):
         return self._value
 
     async def async_set_native_value(self, value: float):
+        chargemode = (
+            self._hass.data.get(DOMAIN, {})
+            .get(self._entry_id, {})
+            .get("chargemode_data", {})
+        )
+        mode = chargemode.get("mode", "hybrid")
+        mincharginpowerquota = chargemode.get("mincharginpowerquota", 100)
         await self._client.set_charge_mode(
-            mode=None,
+            mode=mode,
             minpvpowerquota=int(value),
-            mincharginpowerquota=None,
-            entry_id=self._entry_id,
+            mincharginpowerquota=mincharginpowerquota,
         )
         self._value = int(value)
         self.async_write_ha_state()
@@ -127,12 +137,35 @@ class MinPvPowerQuota(_WBAvailableMixin, NumberEntity):
         self._value = int(value)
         self.async_write_ha_state()
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self._hass,
+                SIGNAL_CHARGEMODE_UPDATE.format(self._entry_id),
+                self._handle_chargemode_push,
+            )
+        )
+
+    def _handle_chargemode_push(self) -> None:
+        """Quota-Wert aus WS-Daten übernehmen, wenn der KSEM ihn geändert hat."""
+        chargemode = (
+            self._hass.data.get(DOMAIN, {})
+            .get(self._entry_id, {})
+            .get("chargemode_data", {})
+        )
+        new_value = chargemode.get("minpvpowerquota")
+        if new_value is not None and int(new_value) != self._value:
+            self._value = int(new_value)
+            self.async_write_ha_state()
+
 
 class MinChargingPowerQuota(_WBAvailableMixin, NumberEntity):
     def __init__(
-        self, client, device_info: DeviceInfo, initial, entry_id, wallbox_coord
+        self, hass, client, device_info: DeviceInfo, initial, entry_id, wallbox_coord
     ):
         _WBAvailableMixin.__init__(self, wallbox_coord)
+        self._hass = hass
         self._entry_id = entry_id
         self._client = client
         self._attr_name = "Min Charging Power"
@@ -148,11 +181,10 @@ class MinChargingPowerQuota(_WBAvailableMixin, NumberEntity):
         return self._value
 
     async def async_set_native_value(self, value: float):
-        await self._client.set_charge_mode(
-            mode=None,
-            mincharginpowerquota=int(value),
-            minpvpowerquota=None,
-            entry_id=self._entry_id,
+        chargemode = (
+            self._hass.data.get(DOMAIN, {})
+            .get(self._entry_id, {})
+            .get("chargemode_data", {})
         )
         self._value = int(value)
         self.async_write_ha_state()
@@ -160,3 +192,25 @@ class MinChargingPowerQuota(_WBAvailableMixin, NumberEntity):
     def update_value(self, value: int):
         self._value = int(value)
         self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self._hass,
+                SIGNAL_CHARGEMODE_UPDATE.format(self._entry_id),
+                self._handle_chargemode_push,
+            )
+        )
+
+    def _handle_chargemode_push(self) -> None:
+        """Quota-Wert aus WS-Daten übernehmen, wenn der KSEM ihn geändert hat."""
+        chargemode = (
+            self._hass.data.get(DOMAIN, {})
+            .get(self._entry_id, {})
+            .get("chargemode_data", {})
+        )
+        new_value = chargemode.get("mincharginpowerquota")
+        if new_value is not None and int(new_value) != self._value:
+            self._value = int(new_value)
+            self.async_write_ha_state()

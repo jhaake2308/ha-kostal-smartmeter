@@ -142,12 +142,6 @@ async def async_setup_entry(
             hass.data[DOMAIN][entry.entry_id]["wallbox_device_info"] = (
                 wallbox_device_info
             )
-            new_entities = [
-                KsemWallboxSensor(
-                    uuid, f"{label} State", model, wb_serial, version, state
-                )
-            ]
-            async_add_entities(new_entities)
             wb_entities_created = True
 
         def _wb_listener():
@@ -218,7 +212,6 @@ class KsemEvParameterSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = device_info
         self._attr_native_unit_of_measurement = unit
         self._attr_state_class = SensorStateClass.MEASUREMENT if unit else None
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
         self._data_key = data_key
         self._divider = divider
