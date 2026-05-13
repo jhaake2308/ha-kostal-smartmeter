@@ -1,7 +1,7 @@
 {
   "domain": "ksem",
   "name": "Kostal Smartmeter",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "documentation": "https://github.com/jhaake2308/ha-kostal-smartmeter",
   "issue_tracker": "https://github.com/jhaake2308/ha-kostal-smartmeter/issues",
   "dependencies": [],
