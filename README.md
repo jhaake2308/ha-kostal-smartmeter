@@ -2,7 +2,7 @@
 
 This is a custom component for Home Assistant to integrate the Kostal Smart Energy Meter (KSEM) and a connected ENECTOR wallbox.
 
-## Status (v1.0.0-alpha.7)
+## Status (v1.0.0-alpha.8)
 
 Die Kernfunktionalität ist stabil und getestet:
 - **KSEM-GUI → HA**: Lademodus-Änderungen kommen per WebSocket-Push praktisch verzögerungsfrei an
