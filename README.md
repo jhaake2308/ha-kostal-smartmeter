@@ -4,7 +4,10 @@ This is a custom component for Home Assistant to integrate the Kostal Smart Ener
 
 ## Status (v1.0.0-alpha.8)
 
-Die Kernfunktionalität ist stabil und getestet:
+!! NOT FOR PRUDUCTIVE USE !! 
+Currently the charge mode is being changed, but charging never starts
+
+~~Die Kernfunktionalität ist stabil und getestet:~~
 - **KSEM-GUI → HA**: Lademodus-Änderungen kommen per WebSocket-Push praktisch verzögerungsfrei an
 - **HA → Wallbox**: Lademodus-Umschaltung per REST funktioniert
 
