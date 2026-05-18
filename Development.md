@@ -2,11 +2,11 @@
 
 WIE IMNMER GILT, ERST REDEN, DANN CODEN!
 
-## Status Quo (v1.0.0-alpha.6)
+## Status Quo (v2.0.0-alpha.10)
 
-Die Integration nutzt eine Kombination aus REST-Polling (Coordinator) und einer
-persistenten WebSocket-Verbindung für Echtzeit-Push-Updates des Lademodus.
-Beide Richtungen sind getestet und funktionieren:
+Die Integration nutzt REST-Polling (zwei Coordinatoren) und Modbus TCP für Energiedaten.
+Der frühere persistente WebSocket für den Lademodus wurde entfernt, da er den
+internen Ladestart des KSEM blockiert hat.
 
 ### Architektur
 
@@ -14,41 +14,45 @@ Beide Richtungen sind getestet und funktionieren:
 | Coordinator | Intervall | Endpunkte |
 |---|---|---|
 | `ksem_smartmeter` | 30 s | `/api/device-settings/deviceusage` |
-| `ksem_wallbox` | 10 s | `/api/e-mobility/evselist`, `/api/evse-kostal/evse/<id>/details`, `/api/e-mobility/config/phaseswitching`, `/api/kostal-energyflow/configuration`, `/api/e-mobility/state`, `/api/e-mobility/evparameterlist` |
+| `ksem_wallbox` | 60 s | `/api/e-mobility/evselist`, `/api/evse-kostal/evse/<id>/details`, `/api/e-mobility/config/phaseswitching`, `/api/kostal-energyflow/configuration`, `/api/e-mobility/state`, `/api/e-mobility/evparameterlist`, Chargemode-Snapshot (WS, kurz) |
 
-#### WebSocket-Push (`ksem_chargemode_ws`)
-- Verbindung zu `ws://<host>/api/data-transfer/ws/json/json/local/config/e-mobility/chargemode`
-- Authentifizierung: Bearer-Token im HTTP-Header + erste WS-Nachricht `"Bearer <token>"`
-- `heartbeat=30` → stumme Verbindungsabbrüche werden schnell erkannt
-- Exponentieller Backoff beim Reconnect: 5 s → 10 s → 20 s → … max 300 s
-- Jede empfangene Nachricht füllt `chargemode_data` und sendet `SIGNAL_CHARGEMODE_UPDATE`
+#### Modbus TCP (`ksem_modbus_all`)
+| Coordinator | Intervall | Register |
+|---|---|---|
+| `ksem_modbus_all` | 10 s | 19 Register in 4 Blöcken: Netzleistung (0–27), Energiezähler (512–519), Energiefluss (40972–41003), Wallbox Live (49206–49257) |
 
-### Entitäten & Push-Verhalten
+#### Chargemode-Snapshot
+- Beim Coordinator-Update wird kurz eine WS-Verbindung zu
+  `ws://<host>/api/data-transfer/ws/json/json/local/config/e-mobility/chargemode` aufgebaut
+- Nach Empfang der ersten Nachricht wird die Verbindung **sofort getrennt** (~1 s)
+- Kein dauerhafter WS → KSEM bleibt im autonomen Lademodus
 
-| Entität | Datei | Datenquelle | Push |
+### Entitäten & Datenquellen
+
+| Entität | Datei | Datenquelle | Intervall |
 |---|---|---|---|
-| Systemsensoren (CPU, RAM …) | `sensor.py` | `ksem_smartmeter` | Nein (Poll) |
-| Wallbox-Sensoren (Leistung, EV-Params) | `sensor.py` | `ksem_wallbox` | Nein (Poll) |
-| Lademodus | `select.py` | WS `chargemode_data` | **Ja** – sofort bei WS-Event |
-| Min PV Power Quota | `number.py` | WS `chargemode_data` | **Ja** – sofort bei WS-Event |
-| Min Charging Power Quota | `number.py` | WS `chargemode_data` | **Ja** – sofort bei WS-Event |
-| Phasenumschaltung | `select.py` | `ksem_wallbox` | Nein (Poll) |
-| Battery Usage | `switch.py` | `ksem_wallbox` | Nein (Poll) |
+| Systemsensoren (CPU, RAM …) | `sensor.py` | `ksem_smartmeter` | 30 s |
+| Wallbox-Sensoren (Leistung, EV-Params) | `sensor.py` | `ksem_wallbox` | 60 s |
+| Modbus-Sensoren (Grid, PV, Batterie, WB-Live) | `sensor.py` | `ksem_modbus_all` | 10 s |
+| Lademodus | `select.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
+| Min PV Power Quota | `number.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
+| Min Charging Power Quota | `number.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
+| Phasenumschaltung | `select.py` | `ksem_wallbox` | 60 s |
+| Battery Usage | `switch.py` | `ksem_wallbox` | 60 s |
 
-### Behobene Bugs (seit alpha.3)
+### Behobene Bugs & Änderungen
 
-1. **`api.py`**: Falsche HA-Entity-Imports entfernt; fehlende Methode `async_listen_ws` implementiert.
-2. **`__init__.py`**: Fehlender WS-Task und `chargemode_data`-Dict implementiert; `SIGNAL_CHARGEMODE_UPDATE` Dispatcher-Signal hinzugefügt; exponentieller Backoff im Reconnect-Loop.
-3. **`select.py`**: Ungültiger Parameter `token=None` entfernt; `current_option` liest jetzt echte WS-Daten; Dispatcher-Listener für sofortigen Push registriert.
-4. **`number.py`**: `set_charge_mode()` mit ungültigen Argumenten korrigiert; Dispatcher-Listener für Quota-Sync via Push hinzugefügt.
-5. **`sensor.py`**: Referenz auf nicht definierte Klasse `KsemWallboxSensor` entfernt.
-6. **`select.py` / `number.py`** *(alpha.6)*: `@callback`-Decorator auf `_handle_chargemode_push` – `async_write_ha_state()` wurde aus SyncWorker-Threads aufgerufen und löste `RuntimeError` aus.
+1. **`api.py`** *(alpha.1–3)*: Falsche HA-Entity-Imports entfernt; fehlende Methode `async_listen_ws` implementiert.
+2. **`__init__.py`** *(alpha.3)*: WS-Task und `chargemode_data`-Dict implementiert; exponentieller Backoff im Reconnect-Loop.
+3. **`select.py`** *(alpha.3)*: `current_option` liest WS-Daten; Dispatcher-Listener für Push registriert.
+4. **`number.py`** *(alpha.3)*: `set_charge_mode()` korrigiert; Dispatcher-Listener für Quota-Sync.
+5. **`sensor.py`** *(alpha.3)*: Referenz auf nicht definierte Klasse `KsemWallboxSensor` entfernt.
+6. **`select.py` / `number.py`** *(alpha.6)*: `@callback`-Decorator auf `_handle_chargemode_push`.
+7. **Laden startet nicht** *(alpha.9)*: Persistente WS-Verbindung zum Chargemode-Stream wurde durch einen einmaligen Snapshot ersetzt. Eine dauerhaft offene Verbindung signalisierte dem KSEM einen externen Controller, der das autonome Laden blockierte. Deaktivierung der Extension hob die Sperre auf → Bestätigung der Ursache.
+8. **Modbus wiederhergestellt** *(alpha.9)*: `modbus_map.py` (19 fokussierte Register), `modbus_helper.py` und `ksem_modbus_all`-Coordinator wieder eingebaut. Energiefluss-, Batterie- und Wallbox-Livedaten verfügbar.
 
 ### Bekannte Einschränkungen
 
-- **Wallbox-Live-Messwerte** (Strom, Spannung je Phase) werden über den Protobuf-WebSocket
-  (`ws://.../ws/protobuf/gdr/local/values/+/evse`) übertragen. Die Integration liest diese
-  noch nicht aus, da das `.proto`-Schema nicht vorliegt.
-- **Wallbox-Zustandsstream** (`stateConnected`, `stateCharging` etc.) via JSON-WebSocket
-  (`ws://.../ws/json/json/local/evse/+/state`) ist noch nicht implementiert.
-  Beides ist für eine spätere Version geplant.
+- **Enector_\*-Sensoren** erscheinen aktuell unter dem Smartmeter-Gerät statt unter der Wallbox, wenn die Wallbox beim Start noch nicht erreichbar ist (race condition beim ersten Coordinator-Refresh).
+- **Wallbox-Zustandsstream** (`stateConnected`, `stateCharging` etc.) via JSON-WebSocket (`ws://.../ws/json/json/local/evse/+/state`) ist nicht implementiert.
+- **Wallbox-Protobuf-Stream** (Strom/Spannung je Phase) ist nicht implementiert (`.proto`-Schema nicht vorliegend).

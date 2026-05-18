@@ -2,23 +2,24 @@
 
 This is a custom component for Home Assistant to integrate the Kostal Smart Energy Meter (KSEM) and a connected ENECTOR wallbox.
 
-## Status (v1.0.0-alpha.8)
+## Status (v2.0.0-alpha.10)
 
-!! NOT FOR PRUDUCTIVE USE !! 
-Currently the charge mode is being changed, but charging never starts
+!! NOT FOR PRODUCTIVE USE !!
 
-~~Die Kernfunktionalität ist stabil und getestet:~~
-- **KSEM-GUI → HA**: Lademodus-Änderungen kommen per WebSocket-Push praktisch verzögerungsfrei an
-- **HA → Wallbox**: Lademodus-Umschaltung per REST funktioniert
+Die Kernfunktionalität ist implementiert und wird derzeit getestet:
+- **Lademodus-Umschaltung** (HA → Wallbox): funktioniert
+- **Laden startet**: Fix in alpha.9 – persistente WS-Verbindung wurde durch Snapshot-Polling ersetzt (dauerhafter WS blockierte KSEM-internen Ladestart)
+- **Energiedaten via Modbus**: Grid-Leistung, PV, Batterie-SoC, Wallbox-Ladeleistung etc. wieder verfügbar
 
 ## Features
 
-*   Sensors for KSEM device status (CPU, RAM).
-*   Sensors for live charging data from the wallbox (Available Power, EV Current, Phases, etc.).
-*   Control for the charging mode (Lock, Power, Solar Pure, Solar Plus) — **live push from device**.
-*   Control for Min PV Power and Min Charging Power quotas — **live push from device**.
-*   Switch to control battery usage during Solar Pure mode.
-*   Selector for phase switching (1 Phase / 3 Phases / Automatic).
+*   Sensoren für KSEM-Gerätestatus (CPU, RAM).
+*   Energiefluss-Sensoren via Modbus (Grid, PV, Batterie, Hausverbrauch, Wallbox-Aufteilung).
+*   Wallbox Live-Sensoren via Modbus (Ladestatus, Ladeleistung, geladene Energie, Strom L1).
+*   Steuerung des Lademodus (Lock, Power, Solar Pure, Solar Plus).
+*   Steuerung von Min PV Power und Min Charging Power Quotas.
+*   Schalter für Batterienutzung im Solar-Pure-Modus.
+*   Auswahl der Phasenumschaltung (1 Phase / 3 Phasen / Automatisch).
 
 ## Installation via HACS (empfohlen)
 
