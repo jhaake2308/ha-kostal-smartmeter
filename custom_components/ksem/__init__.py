@@ -8,6 +8,7 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from datetime import timedelta
 from .const import DOMAIN
 from .api import KsemClient
+from .modbus_helper import KsemModbusClient
 import asyncio
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data["host"]
     password = entry.data["password"]
     client = KsemClient(hass, host, password)
+    modbus_client = KsemModbusClient(host)
 
     async def _update_smartmeter():
         try:
@@ -119,12 +121,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "chargemode": chargemode,
         }
 
+    async def _update_modbus():
+        try:
+            return await modbus_client.read_all()
+        except Exception as err:
+            raise UpdateFailed(f"Modbus-Fehler: {err}") from err
+
     smart_coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name="ksem_smartmeter",
         update_method=_update_smartmeter,
         update_interval=datetime.timedelta(seconds=30),
+    )
+    modbus_coordinator = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name="ksem_modbus_all",
+        update_method=_update_modbus,
+        update_interval=datetime.timedelta(seconds=10),
     )
     wallbox_coordinator = DataUpdateCoordinator(
         hass,
@@ -136,6 +151,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await smart_coordinator.async_refresh()
     await wallbox_coordinator.async_refresh()
+    await modbus_coordinator.async_refresh()
 
 
     info = await client.get_device_info()
@@ -160,6 +176,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "client": client,
         "smart_coordinator": smart_coordinator,
         "wallbox_coordinator": wallbox_coordinator,
+        "modbus_coordinator": modbus_coordinator,
         "device_info": device_info,
         "serial": serial,
     }

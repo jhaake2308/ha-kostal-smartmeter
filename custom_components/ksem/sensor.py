@@ -1,12 +1,13 @@
 import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from .const import DOMAIN
 from homeassistant.helpers.entity import EntityCategory
 from .helper import first_evse_from_coordinator
+from .modbus_map import SENSOR_DEFINITIONS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ async def async_setup_entry(
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     smart = data["smart_coordinator"]
-    wallbox = data.get("wallbox_coordinator")  # kann None sein
+    wallbox = data.get("wallbox_coordinator")
+    modbus = data["modbus_coordinator"]
     device_info = data["device_info"]
     serial = data["serial"]
 
@@ -110,9 +112,19 @@ async def async_setup_entry(
         more_entities.extend(ev_param_sensors)
 
     hass.data[DOMAIN][entry.entry_id]["wallbox_device_info"] = wallbox_device_info
-    # 4) jetzt alles hinzufügen
+    # 4) OBIS/Modbus-Entities
+    obis_entities = []
+    for addr, spec in SENSOR_DEFINITIONS.items():
+        info = (
+            wallbox_device_info
+            if spec.get("device") == "wallbox" and wallbox_device_info
+            else device_info
+        )
+        obis_entities.append(KsemObisModbusSensor(modbus, addr, spec, info))
+
+    # 5) jetzt alles hinzufügen
     async_add_entities(
-        smartmeter_entities + wallbox_entities + more_entities
+        smartmeter_entities + wallbox_entities + more_entities + obis_entities
     )
 
     # 6) Falls beim Start noch keine WB da war: später automatisch nachziehen
@@ -256,4 +268,49 @@ class KsemSmartmeterSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         return self.coordinator.data.get(self._sensor_key)
+
+
+class KsemObisModbusSensor(CoordinatorEntity, SensorEntity):
+    """Sensor für einen Modbus-Register-Wert aus SENSOR_DEFINITIONS."""
+
+    def __init__(self, coordinator, address: int, spec: dict, device_info: DeviceInfo):
+        super().__init__(coordinator)
+        self._address = address
+        self._key = spec["name"]
+        self._mapping = spec.get("map")
+        self._attr_name = spec["name"]
+        self._attr_native_unit_of_measurement = spec.get("unit") or None
+
+        if spec.get("device_class") == "enum":
+            self._attr_device_class = SensorDeviceClass.ENUM
+            self._attr_options = list(self._mapping.values()) if self._mapping else []
+            self._attr_native_unit_of_measurement = None
+            self._attr_state_class = None
+        else:
+            dc = spec.get("device_class")
+            self._attr_device_class = dc
+            sc = spec.get("state_class")
+            if sc == "total_increasing":
+                self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            elif sc == "measurement" or dc in (
+                "power", "voltage", "current", "battery", "temperature", "frequency"
+            ):
+                self._attr_state_class = SensorStateClass.MEASUREMENT
+            else:
+                self._attr_state_class = None
+
+        ident = next(iter(device_info["identifiers"]))[1]
+        self._attr_unique_id = f"{ident}_obis_{address}"
+        self._attr_device_info = device_info
+
+    @property
+    def native_value(self):
+        if not self.coordinator.data:
+            return None
+        val = self.coordinator.data.get(self._key)
+        if val is None:
+            return None
+        if self._mapping:
+            return self._mapping.get(int(val), f"Unbekannt ({val})")
+        return val
 
