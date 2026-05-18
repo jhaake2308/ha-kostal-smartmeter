@@ -1,14 +1,12 @@
 import logging
 from typing import Optional
 
-from homeassistant.core import callback
 from homeassistant.components.select import SelectEntity
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SIGNAL_CHARGEMODE_UPDATE
-from .helper import first_evse_from_coordinator  # Single-WB Helfer
+from .const import DOMAIN
+from .helper import first_evse_from_coordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -143,30 +141,10 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> Optional[str]:
-        """Aktuellen Lademodus aus den via WebSocket empfangenen Daten lesen."""
-        chargemode = (
-            self._hass.data.get(DOMAIN, {})
-            .get(self._entry_id, {})
-            .get("chargemode_data", {})
-        )
+        """Aktuellen Lademodus aus den Coordinator-Daten lesen."""
+        chargemode = (self.coordinator.data or {}).get("chargemode", {})
         mode = chargemode.get("mode")
         return MODE_MAP.get(mode)
-
-    async def async_added_to_hass(self) -> None:
-        """Dispatcher-Listener registrieren, sobald Entity in HA eingebunden ist."""
-        await super().async_added_to_hass()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                SIGNAL_CHARGEMODE_UPDATE.format(self._entry_id),
-                self._handle_chargemode_push,
-            )
-        )
-
-    @callback
-    def _handle_chargemode_push(self) -> None:
-        """Wird direkt vom WS-Push aufgerufen – HA-State sofort aktualisieren."""
-        self.async_write_ha_state()
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
@@ -177,7 +155,6 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
 
         try:
             await self._client.set_charge_mode(mode=mode)
-            # After setting, request a refresh to update all related states
             await self.coordinator.async_request_refresh()
         except Exception as e:
             _LOGGER.error("Fehler beim Setzen des Lademodus: %s", e)

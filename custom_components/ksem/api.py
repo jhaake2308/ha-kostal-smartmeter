@@ -172,6 +172,35 @@ class KsemClient:
             text_mode=True,
         )
 
+    async def get_chargemode_snapshot(self) -> dict:
+        """Verbindet kurz mit dem Chargemode-WS, liest eine Nachricht und trennt sofort.
+
+        So wird der aktuelle Lademodus beim Start einmalig abgefragt, ohne eine
+        dauerhafte Verbindung zu halten – die das KSEM als externe Steuerung
+        interpretieren würde und das Laden blockieren kann.
+        """
+        session = async_get_clientsession(self.hass)
+        if not self.token or datetime.datetime.now() > self.token.expire_date:
+            await self._auth(session)
+        url = (
+            f"ws://{self.host}"
+            "/api/data-transfer/ws/json/json/local/config/e-mobility/chargemode"
+        )
+        headers = bearer_header(self.token.access_token)
+        _LOGGER.debug("Chargemode-Snapshot: kurze WS-Verbindung zu %s", url)
+        async with session.ws_connect(url, headers=headers) as ws:
+            await ws.send_str(f"Bearer {self.token.access_token}")
+            async for msg in ws:
+                if msg.type == WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    payload = data.get("msg", data)
+                    _LOGGER.debug("Chargemode-Snapshot empfangen: %s", payload)
+                    return payload
+                elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE):
+                    _LOGGER.warning("Chargemode-Snapshot: WS sofort geschlossen")
+                    break
+        return {}
+
     async def async_listen_ws(self, callback) -> None:
         """Verbindet sich mit dem Charge-Mode-WebSocket und ruft callback für jede Nachricht auf.
 

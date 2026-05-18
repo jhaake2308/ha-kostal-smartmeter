@@ -8,8 +8,6 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from datetime import timedelta
 from .const import DOMAIN
 from .api import KsemClient
-from homeassistant.helpers.dispatcher import async_dispatcher_send
-from .const import SIGNAL_CHARGEMODE_UPDATE
 import asyncio
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,10 +25,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data["host"]
     password = entry.data["password"]
     client = KsemClient(hass, host, password)
-
-    # Geteiltes Dict, das vom WS-Task laufend befüllt wird und von
-    # select.py / number.py gelesen werden kann.
-    chargemode_data: dict = {}
 
     async def _update_smartmeter():
         try:
@@ -105,12 +99,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("EV-Parameter konnten nicht geladen werden: %s", err)
             ev_params = {}
 
+        # Chargemode: kurze WS-Snapshot-Verbindung (connect → 1 Nachricht → disconnect).
+        # Eine dauerhafte WS-Verbindung würde das KSEM als externen Controller sperren
+        # und das Laden blockieren – der Snapshot hält nie länger als ~1 Sekunde.
+        try:
+            chargemode = await asyncio.wait_for(
+                client.get_chargemode_snapshot(), timeout=5.0
+            )
+        except Exception as err:
+            _LOGGER.warning("Chargemode-Snapshot fehlgeschlagen: %s", err)
+            chargemode = {}
+
         return {
             "evse": result,
             "phase_usage": phase_usage,
             "energyflow_config": config,
             "evse_state": evse_state,
             "ev_params": ev_params,
+            "chargemode": chargemode,
         }
 
     smart_coordinator = DataUpdateCoordinator(
@@ -125,40 +131,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER,
         name="ksem_wallbox",
         update_method=_update_wallbox,
-        update_interval=datetime.timedelta(seconds=10),
+        update_interval=datetime.timedelta(seconds=60),
     )
 
     await smart_coordinator.async_refresh()
     await wallbox_coordinator.async_refresh()
 
-    # WebSocket-Task: lauscht auf Lademodus-Änderungen und befüllt chargemode_data
-    async def _on_chargemode(msg: dict):
-        """Callback für jede eingehende WS-Nachricht."""
-        chargemode_data.update(msg)
-        async_dispatcher_send(
-            hass, SIGNAL_CHARGEMODE_UPDATE.format(entry.entry_id)
-        )
-
-    async def _ws_listener_loop():
-        delay = 5
-        while True:
-            try:
-                await client.async_listen_ws(_on_chargemode)
-                # Sauberes Ende (CLOSE-Frame) → kurz warten, dann neu verbinden
-                _LOGGER.info("WS-Verbindung sauber geschlossen – reconnect in %ss", delay)
-            except asyncio.CancelledError:
-                _LOGGER.debug("WS-Task abgebrochen")
-                return
-            except Exception as err:
-                _LOGGER.warning(
-                    "WS-Verbindung unterbrochen: %s – reconnect in %ss", err, delay
-                )
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, 300)  # 5s → 10s → 20s → … max 5min
-
-    ws_task = hass.async_create_background_task(
-        _ws_listener_loop(), "ksem_chargemode_ws"
-    )
 
     info = await client.get_device_info()
     mac = info.get("Mac")
@@ -184,8 +162,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "wallbox_coordinator": wallbox_coordinator,
         "device_info": device_info,
         "serial": serial,
-        "chargemode_data": chargemode_data,
-        "ws_task": ws_task,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -193,11 +169,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    # WS-Task sauber beenden
-    ws_task = hass.data[DOMAIN].get(entry.entry_id, {}).get("ws_task")
-    if ws_task:
-        ws_task.cancel()
-
     unload_ok = all(
         [
             await hass.config_entries.async_forward_entry_unload(entry, platform)
