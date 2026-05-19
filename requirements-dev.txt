@@ -1,0 +1,5 @@
+# Entwicklungsabhängigkeiten (Testskripte + Linting)
+# Aufbau: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements-dev.txt
+pymodbus>=3.7.0
+aiohttp>=3.9.0
+flake8>=7.0.0
