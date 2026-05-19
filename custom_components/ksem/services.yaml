@@ -13,8 +13,6 @@ set_timebased_charge:
         start (HH:MM) und end (HH:MM).
       required: true
       example: '[{"weekday": 4, "start": "03:00", "end": "05:00"}]'
-      selector:
-        object:
 
 clear_timebased_charge:
   name: Zeitbasierten Ladeplan zurücksetzen
