@@ -12,6 +12,17 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    - **TODO (offen):** GET /api/e-mobility/timebasedCharge implementieren (aktuellen Plan in HA lesen)
 2) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
 
+   **Branch `debug/solar-mode-blocking` — was entfernt wurde (Stufe A + B):**
+   - **SmartmeterCoordinator komplett entfernt** (CPU/RAM/Flash-Diagnostics, 30s-Polling) → 8 Sensor-Entities weg
+   - **WS-Snapshot** (`get_chargemode_snapshot`) aus wallbox_coordinator entfernt → Hauptverdächtiger #1
+   - **`GET /api/e-mobility/state`** (evse_state) entfernt → Verdächtiger #2
+   - **`GET /api/e-mobility/evparameterlist`** (ev_params) entfernt → Verdächtiger #3
+   - **Klassen entfernt:** `KsemSmartmeterSensor`, `KsemEvParameterSensor`, `KsemEvseAvailablePowerSensor`
+   - **Modbus-Interval:** 10s → 30s (ausreichend für Ladeleistungsanzeige)
+   - **ChargeModeSelect:** Liest jetzt optimistisch aus `hass.data["last_chargemode"]` statt WS-Daten
+   - **Architektur nach Bereinigung:** Modbus (30s) für alle Live-Daten + schlanker wallbox_coordinator (60s) nur für evselist/phaseswitching/energyflow + REST on-demand für Steuerung
+   - **Rollback:** `git checkout main` oder PR nicht mergen
+
 ## Status Quo (v2.0.0-alpha.10)
 
 Die Integration nutzt REST-Polling (zwei Coordinatoren) und Modbus TCP für Energiedaten.

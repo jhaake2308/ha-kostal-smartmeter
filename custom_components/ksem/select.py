@@ -129,6 +129,8 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
         self._attr_name = "Lademodus"
         self._attr_unique_id = f"{entry_id}_ksem_charge_mode"
         self._attr_options = list(MODE_MAP.values())
+        # Optimistischer Zustand: kein WS-Polling mehr, letzten gesetzten Modus merken.
+        # Wird auch vom set_timebased_charge-Service aktualisiert (via hass.data).
 
         # Device-Info vom Coordinator holen (sobald verfügbar)
         wb = first_evse_from_coordinator(self.coordinator)
@@ -142,10 +144,10 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> Optional[str]:
-        """Aktuellen Lademodus aus den Coordinator-Daten lesen."""
-        chargemode = (self.coordinator.data or {}).get("chargemode", {})
-        mode = chargemode.get("mode")
-        return MODE_MAP.get(mode)
+        """Letzten gesetzten Lademodus aus hass.data lesen (optimistisch, kein WS)."""
+        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        mode = entry_data.get("last_chargemode")
+        return MODE_MAP.get(mode) if mode else None
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
@@ -156,6 +158,9 @@ class KsemChargeModeSelect(CoordinatorEntity, SelectEntity):
 
         try:
             await self._client.set_charge_mode(mode=mode)
+            # Optimistisch in hass.data speichern
+            self._hass.data[DOMAIN][self._entry_id]["last_chargemode"] = mode
+            self.async_write_ha_state()
             await self.coordinator.async_request_refresh()
         except Exception as e:
             _LOGGER.error("Fehler beim Setzen des Lademodus: %s", e)

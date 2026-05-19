@@ -78,12 +78,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = KsemClient(hass, host, password)
     modbus_client = KsemModbusClient(host)
 
-    async def _update_smartmeter():
-        try:
-            return await client.get_device_status()
-        except Exception as err:
-            raise UpdateFailed(f"Smartmeter-Fehler: {err}")
-
     async def _update_wallbox():
         """Robuster WB-Update:
         - /evselist ist 'kritisch' (ohne Liste -> UpdateFailed)
@@ -140,35 +134,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "Energiefluss-Konfiguration konnte nicht geladen werden: %s", err
             )
             config = {}
-        try:
-            evse_state = await client.get_evse_state()
-        except Exception as err:
-            _LOGGER.warning("EVSE-Status konnte nicht geladen werden: %s", err)
-            evse_state = {}
-        try:
-            ev_params = await client.get_ev_parameters()
-        except Exception as err:
-            _LOGGER.warning("EV-Parameter konnten nicht geladen werden: %s", err)
-            ev_params = {}
-
-        # Chargemode: kurze WS-Snapshot-Verbindung (connect → 1 Nachricht → disconnect).
-        # Eine dauerhafte WS-Verbindung würde das KSEM als externen Controller sperren
-        # und das Laden blockieren – der Snapshot hält nie länger als ~1 Sekunde.
-        try:
-            chargemode = await asyncio.wait_for(
-                client.get_chargemode_snapshot(), timeout=5.0
-            )
-        except Exception as err:
-            _LOGGER.warning("Chargemode-Snapshot fehlgeschlagen: %s", err)
-            chargemode = {}
-
+        # ENTFERNT (debug/solar-mode-blocking branch):
+        #   - evse_state  (GET /api/e-mobility/state)        → Blocking-Verdächtiger #2
+        #   - ev_params   (GET /api/e-mobility/evparameterlist) → Blocking-Verdächtiger #3
+        #   - chargemode WS-Snapshot                          → Blocking-Verdächtiger #1
+        # Ladeleistung / Status kommen ausschließlich aus Modbus (Reg. 49246, 49206).
+        # Chargemode-Anzeige läuft jetzt optimistisch (letzter gesetzter Wert).
         return {
             "evse": result,
             "phase_usage": phase_usage,
             "energyflow_config": config,
-            "evse_state": evse_state,
-            "ev_params": ev_params,
-            "chargemode": chargemode,
         }
 
     async def _update_modbus():
@@ -177,19 +152,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:
             raise UpdateFailed(f"Modbus-Fehler: {err}") from err
 
-    smart_coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="ksem_smartmeter",
-        update_method=_update_smartmeter,
-        update_interval=datetime.timedelta(seconds=30),
-    )
     modbus_coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name="ksem_modbus_all",
         update_method=_update_modbus,
-        update_interval=datetime.timedelta(seconds=10),
+        update_interval=datetime.timedelta(seconds=30),  # reduziert von 10s (debug branch)
     )
     wallbox_coordinator = DataUpdateCoordinator(
         hass,
@@ -199,7 +167,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_interval=datetime.timedelta(seconds=60),
     )
 
-    await smart_coordinator.async_refresh()
     await wallbox_coordinator.async_refresh()
     await modbus_coordinator.async_refresh()
 
@@ -224,7 +191,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
-        "smart_coordinator": smart_coordinator,
         "wallbox_coordinator": wallbox_coordinator,
         "modbus_coordinator": modbus_coordinator,
         "device_info": device_info,
@@ -247,6 +213,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await data["client"].set_timebased_charge(schedule)
         # Lademodus auf "time" stellen, damit der Zeitplan auch aktiv wird
         await data["client"].set_charge_mode(mode="time")
+        # Optimistischen Zustand für ChargeModeSelect aktualisieren
+        data["last_chargemode"] = "time"
 
     async def _handle_clear_timebased_charge(call):
         """Service ksem.clear_timebased_charge – setzt Ladeplan auf 'alles aus'."""
