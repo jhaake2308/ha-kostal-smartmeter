@@ -23,19 +23,18 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    - **Architektur nach Bereinigung:** Modbus (30s) für alle Live-Daten + schlanker wallbox_coordinator (60s) nur für evselist/phaseswitching/energyflow + REST on-demand für Steuerung
    - **Rollback:** `git checkout main` oder PR nicht mergen
 
-## Status Quo (v2.0.0-alpha.10)
+## Status Quo (v2.0.0-alpha.12 / main)
 
-Die Integration nutzt REST-Polling (zwei Coordinatoren) und Modbus TCP für Energiedaten.
-Der frühere persistente WebSocket für den Lademodus wurde entfernt, da er den
-internen Ladestart des KSEM blockiert hat.
+Die Integration nutzt REST-Polling (ein Coordinator) und Modbus TCP für Energiedaten.
+Der WS-Snapshot für den Chargemode wird weiterhin alle 60 s kurz geöffnet.
+Solar-Mode-Blocking-Bug ist noch nicht abschließend gelöst (Debug-Branch aktiv).
 
 ### Architektur
 
 #### REST-Polling (Coordinator)
 | Coordinator | Intervall | Endpunkte |
 |---|---|---|
-| `ksem_smartmeter` | 30 s | `/api/device-settings/deviceusage` |
-| `ksem_wallbox` | 60 s | `/api/e-mobility/evselist`, `/api/evse-kostal/evse/<id>/details`, `/api/e-mobility/config/phaseswitching`, `/api/kostal-energyflow/configuration`, `/api/e-mobility/state`, `/api/e-mobility/evparameterlist`, Chargemode-Snapshot (WS, kurz) |
+| `ksem_wallbox` | 60 s | `/api/e-mobility/evselist`, `/api/evse-kostal/evse/<id>/details`, `/api/e-mobility/config/phaseswitching`, `/api/kostal-energyflow/configuration`, Chargemode-Snapshot (WS, kurz) |
 
 #### Modbus TCP (`ksem_modbus_all`)
 | Coordinator | Intervall | Register |
@@ -52,10 +51,8 @@ internen Ladestart des KSEM blockiert hat.
 
 | Entität | Datei | Datenquelle | Intervall |
 |---|---|---|---|
-| Systemsensoren (CPU, RAM …) | `sensor.py` | `ksem_smartmeter` | 30 s |
-| Wallbox-Sensoren (Leistung, EV-Params) | `sensor.py` | `ksem_wallbox` | 60 s |
 | Modbus-Sensoren (Grid, PV, Batterie, WB-Live) | `sensor.py` | `ksem_modbus_all` | 10 s |
-| Lademodus | `select.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
+| Lademodus | `select.py` | `ksem_wallbox` (Chargemode-Snapshot, optimistisch) | 60 s |
 | Min PV Power Quota | `number.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
 | Min Charging Power Quota | `number.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
 | Phasenumschaltung | `select.py` | `ksem_wallbox` | 60 s |
@@ -71,6 +68,8 @@ internen Ladestart des KSEM blockiert hat.
 6. **`select.py` / `number.py`** *(alpha.6)*: `@callback`-Decorator auf `_handle_chargemode_push`.
 7. **Laden startet nicht** *(alpha.9)*: Persistente WS-Verbindung zum Chargemode-Stream wurde durch einen einmaligen Snapshot ersetzt. Eine dauerhaft offene Verbindung signalisierte dem KSEM einen externen Controller, der das autonome Laden blockierte. Deaktivierung der Extension hob die Sperre auf → Bestätigung der Ursache.
 8. **Modbus wiederhergestellt** *(alpha.9)*: `modbus_map.py` (19 fokussierte Register), `modbus_helper.py` und `ksem_modbus_all`-Coordinator wieder eingebaut. Energiefluss-, Batterie- und Wallbox-Livedaten verfügbar.
+9. **Zeitbasiertes Laden** *(alpha.11)*: Services `ksem.set_timebased_charge` und `ksem.clear_timebased_charge` implementiert. API `PUT /api/e-mobility/timebasedCharge`, Kantenformat, weekday 1=Mo…6=Sa/0=So. Service aktiviert Modus automatisch auf `time`.
+10. **Time Mode Dropdown + Weekday-Doku** *(alpha.12)*: `"time"` in MODE_MAP ergänzt; Chargemode-Select liest optimistisch aus `hass.data` statt WS; Wochentag-Beschreibung auf Mo-first umgestellt; `selector`-Bug in services.yaml behoben (List-Wert wurde als None übergeben).
 
 ### Bekannte Einschränkungen
 
