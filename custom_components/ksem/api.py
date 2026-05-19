@@ -172,6 +172,23 @@ class KsemClient:
             text_mode=True,
         )
 
+    async def set_timebased_charge(self, schedule: list) -> None:
+        """Setzt den zeitbasierten Ladeplan im KSEM (Kantenformat).
+
+        schedule: Liste von Dicts mit weekday, start_hour, start_minute, charge_mode.
+        Wird immer als vollständiger 7-Tage-Plan übermittelt.
+        """
+        _LOGGER.debug("Setze zeitbasierten Ladeplan: %s", schedule)
+        await self._put("/api/e-mobility/timebasedCharge", json=schedule)
+
+    async def clear_timebased_charge(self) -> None:
+        """Setzt den Ladeplan zurück: alle Tage auf 'nicht laden'."""
+        schedule = [
+            {"weekday": wd, "start_hour": 0, "start_minute": 0, "charge_mode": 0}
+            for wd in range(7)
+        ]
+        await self.set_timebased_charge(schedule)
+
     async def get_chargemode_snapshot(self) -> dict:
         """Verbindet kurz mit dem Chargemode-WS, liest eine Nachricht und trennt sofort.
 

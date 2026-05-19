@@ -1,5 +1,6 @@
 import logging
 import datetime
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -13,6 +14,54 @@ import asyncio
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "number", "select", "switch"]
+
+# --- Zeitbasiertes Laden: Hilfsfunktionen ---
+
+_WINDOW_SCHEMA = vol.Schema(
+    {
+        vol.Required("weekday"): vol.All(int, vol.Range(min=0, max=6)),
+        vol.Required("start"): str,
+        vol.Required("end"): str,
+    }
+)
+
+SET_TIMEBASED_SCHEMA = vol.Schema(
+    {vol.Required("windows"): vol.All([_WINDOW_SCHEMA], vol.Length(min=1))}
+)
+
+
+def _parse_hhmm(time_str: str) -> tuple[int, int]:
+    """Parst 'HH:MM' zu (hour, minute)."""
+    parts = time_str.split(":")
+    return int(parts[0]), int(parts[1])
+
+
+def _build_timebased_schedule(windows: list) -> list:
+    """Konvertiert Zeitfenster (Mensch-freundlich) in das KSEM-Kantenformat.
+
+    Wochentag: 0=Sonntag, 1=Montag … 6=Samstag (KSEM-Konvention).
+    Jeder Tag bekommt automatisch eine Default-Kante 00:00=0 (nicht laden).
+    Für jedes Fenster wird eine Ein-Kante (start) und, wenn end != 00:00,
+    eine Aus-Kante (end) gesetzt. Überschneidende Kanten: letzter Wert gewinnt.
+    Fenster über Mitternacht sind nicht unterstützt.
+    """
+    edges: dict[tuple, int] = {}
+    for wd in range(7):
+        edges[(wd, 0, 0)] = 0  # Default: nicht laden
+
+    for w in windows:
+        wd = int(w["weekday"])
+        sh, sm = _parse_hhmm(w["start"])
+        eh, em = _parse_hhmm(w["end"])
+        edges[(wd, sh, sm)] = 1  # Ladestart
+        if not (eh == 0 and em == 0):
+            # 00:00 als Ende würde die Default-Kante redundant überschreiben
+            edges[(wd, eh, em)] = 0  # Ladestop
+
+    return [
+        {"weekday": wd, "start_hour": h, "start_minute": m, "charge_mode": mode}
+        for (wd, h, m), mode in sorted(edges.items())
+    ]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -182,6 +231,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # --- HA-Services für zeitbasiertes Laden ---
+    # Wird nur einmal registriert (erster Entry gewinnt; typischerweise ein KSEM je Installation).
+
+    async def _handle_set_timebased_charge(call):
+        """Service ksem.set_timebased_charge – setzt Ladefenster im KSEM."""
+        data = next(iter(hass.data.get(DOMAIN, {}).values()), None)
+        if not data:
+            _LOGGER.error("set_timebased_charge: keine aktive KSEM-Integration gefunden")
+            return
+        schedule = _build_timebased_schedule(call.data["windows"])
+        _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM", len(schedule))
+        await data["client"].set_timebased_charge(schedule)
+
+    async def _handle_clear_timebased_charge(call):
+        """Service ksem.clear_timebased_charge – setzt Ladeplan auf 'alles aus'."""
+        data = next(iter(hass.data.get(DOMAIN, {}).values()), None)
+        if not data:
+            _LOGGER.error("clear_timebased_charge: keine aktive KSEM-Integration gefunden")
+            return
+        _LOGGER.info("clear_timebased_charge: setze kompletten Zeitplan zurück")
+        await data["client"].clear_timebased_charge()
+
+    if not hass.services.has_service(DOMAIN, "set_timebased_charge"):
+        hass.services.async_register(
+            DOMAIN,
+            "set_timebased_charge",
+            _handle_set_timebased_charge,
+            schema=SET_TIMEBASED_SCHEMA,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            "clear_timebased_charge",
+            _handle_clear_timebased_charge,
+        )
+
     return True
 
 

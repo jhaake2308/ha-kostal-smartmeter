@@ -4,10 +4,12 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Todo ##
 
-1) "time" modus implementieren, man kann Zeitfenster definieren, in denen der PKW geladen werden soll -> Mitschnitt des KSEM per Netzwerklogging liegt vor
-   -> "time-mode-ksem.haake.io_Archive [26-05-19 19-58-57].har"
-   -> Man kann tabellenartig den modus pro tag und pro stunde dynamisch festlegen und speichern
-   -> Ziel ist, diesen Modus über HA zur Verfügung zu stellen, letztlich sollen die Daten für das nächste Zeitfenster zB "Morgen, Mittwoch, 3 uhr bis 5 Uhr" automatisiert zb. eingeschossen werden, damit der PKW abends an die Wallbox angehängt werden kann, aber erst zum tatsächlichen Zeitpunkt (wenn der Strom güngstig ist) geladen wird
+1) ~~"time" modus implementieren~~ → **DONE (alpha.11)**
+   - Service `ksem.set_timebased_charge` implementiert (windows-Liste → KSEM-Kantenformat)
+   - Service `ksem.clear_timebased_charge` implementiert (alles zurücksetzen)
+   - API: `PUT /api/e-mobility/timebasedCharge`, charge_mode 0/1, weekday 0=So..6=Sa
+   - Anbindung an Strompreis-Extension steht noch aus (Extension wird erhoben)
+   - **TODO (offen):** GET /api/e-mobility/timebasedCharge implementieren (aktuellen Plan in HA lesen)
 2) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
 
 ## Status Quo (v2.0.0-alpha.10)
