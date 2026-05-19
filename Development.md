@@ -8,7 +8,7 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    -> "time-mode-ksem.haake.io_Archive [26-05-19 19-58-57].har"
    -> Man kann tabellenartig den modus pro tag und pro stunde dynamisch festlegen und speichern
    -> Ziel ist, diesen Modus über HA zur Verfügung zu stellen, letztlich sollen die Daten für das nächste Zeitfenster zB "Morgen, Mittwoch, 3 uhr bis 5 Uhr" automatisiert zb. eingeschossen werden, damit der PKW abends an die Wallbox angehängt werden kann, aber erst zum tatsächlichen Zeitpunkt (wenn der Strom güngstig ist) geladen wird
-2) Die Verbindung zu HA blockiert weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig
+2) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
 
 ## Status Quo (v2.0.0-alpha.10)
 
