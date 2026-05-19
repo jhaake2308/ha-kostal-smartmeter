@@ -15,6 +15,7 @@ MODE_MAP = {
     "grid": "Power Mode",
     "pv": "Solar Pure Mode",
     "hybrid": "Solar Plus Mode",
+    "time": "Time Mode",  # zeitbasiertes Laden – API-String "time" muss ggf. verifiziert werden
 }
 REVERSE_MODE_MAP = {v: k for k, v in MODE_MAP.items()}
 

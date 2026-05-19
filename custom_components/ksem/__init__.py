@@ -39,7 +39,8 @@ def _parse_hhmm(time_str: str) -> tuple[int, int]:
 def _build_timebased_schedule(windows: list) -> list:
     """Konvertiert Zeitfenster (Mensch-freundlich) in das KSEM-Kantenformat.
 
-    Wochentag: 0=Sonntag, 1=Montag … 6=Samstag (KSEM-Konvention).
+    Wochentag (KSEM-Konvention): 1=Montag, 2=Dienstag, 3=Mittwoch, 4=Donnerstag,
+    5=Freitag, 6=Samstag, 0=Sonntag.
     Jeder Tag bekommt automatisch eine Default-Kante 00:00=0 (nicht laden).
     Für jedes Fenster wird eine Ein-Kante (start) und, wenn end != 00:00,
     eine Aus-Kante (end) gesetzt. Überschneidende Kanten: letzter Wert gewinnt.
@@ -244,6 +245,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schedule = _build_timebased_schedule(call.data["windows"])
         _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM", len(schedule))
         await data["client"].set_timebased_charge(schedule)
+        # Lademodus auf "time" stellen, damit der Zeitplan auch aktiv wird
+        await data["client"].set_charge_mode(mode="time")
 
     async def _handle_clear_timebased_charge(call):
         """Service ksem.clear_timebased_charge – setzt Ladeplan auf 'alles aus'."""
