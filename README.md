@@ -2,7 +2,7 @@
 
 This is a custom component for Home Assistant to integrate the Kostal Smart Energy Meter (KSEM) and a connected ENECTOR wallbox.
 
-## Status (v2.0.0-alpha.11)
+## Status (v2.0.0-alpha.12)
 
 !! NOT FOR PRODUCTIVE USE !!
 
