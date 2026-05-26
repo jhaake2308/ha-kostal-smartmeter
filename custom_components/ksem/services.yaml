@@ -21,3 +21,4 @@ clear_timebased_charge:
   name: Zeitbasierten Ladeplan zurücksetzen
   description: >
     Setzt den gesamten Ladeplan zurück – alle 7 Tage werden auf "nicht laden" gesetzt.
+    Setzt anschließend die Wallbox auf lock-mode (ohne Zeitplan).
