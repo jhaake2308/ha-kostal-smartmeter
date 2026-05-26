@@ -2,7 +2,7 @@
 
 This is a custom component for Home Assistant to integrate the Kostal Smart Energy Meter (KSEM) and a connected ENECTOR wallbox.
 
-## Status (v2.0.0-alpha.12)
+## Status (v2.0.0-alpha.13)
 
 !! NOT FOR PRODUCTIVE USE !!
 
@@ -10,6 +10,7 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 - **Lademodus-Umschaltung** (HA → Wallbox): funktioniert
 - **Laden startet**: Fix in alpha.9 – persistente WS-Verbindung wurde durch Snapshot-Polling ersetzt (dauerhafter WS blockierte KSEM-internen Ladestart)
 - **Energiedaten via Modbus**: Grid-Leistung, PV, Batterie-SoC, Wallbox-Ladeleistung etc. wieder verfügbar
+- **Zeitbasiertes Laden**: Service `ksem.set_timebased_charge` setzt Ladefenster pro Wochentag und Lademodus; `ksem.clear_timebased_charge` setzt zurück und aktiviert Lock-Mode
 
 ## Features
 
@@ -20,6 +21,7 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 *   Steuerung von Min PV Power und Min Charging Power Quotas.
 *   Schalter für Batterienutzung im Solar-Pure-Modus.
 *   Auswahl der Phasenumschaltung (1 Phase / 3 Phasen / Automatisch).
+*   Zeitbasiertes Laden: Ladefenster per Service setzen (Wochentag als Zahl oder Deutsch, Lademodus pro Fenster).
 
 ## Installation via HACS (empfohlen)
 

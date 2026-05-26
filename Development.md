@@ -4,7 +4,7 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Todo ##
 
-1) ~~"time" modus implementieren~~ → **DONE (alpha.11/alpha.12)**
+1) ~~"time" modus implementieren~~ → **DONE (alpha.13)**
    - Service `ksem.set_timebased_charge` implementiert (windows-Liste → KSEM-Kantenformat)
    - Service `ksem.clear_timebased_charge` implementiert (alles zurücksetzen)
    - API: `PUT /api/e-mobility/timebasedCharge`, charge_mode 0/1, weekday 0=So..6=Sa
