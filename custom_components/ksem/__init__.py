@@ -74,9 +74,20 @@ SET_TIMEBASED_SCHEMA = vol.Schema(
 
 
 def _parse_hhmm(time_str: str) -> tuple[int, int]:
-    """Parst 'HH:MM' zu (hour, minute)."""
+    """Parst 'HH:MM' zu (hour, minute).
+
+    Wirft ValueError wenn Minuten != 0, da der KSEM nur volle Stunden unterstützt.
+    Gilt auch für automatisierte Aufrufe (z. B. Strompreis-Automatisierung).
+    """
     parts = time_str.split(":")
-    return int(parts[0]), int(parts[1])
+    hour = int(parts[0])
+    minute = int(parts[1])
+    if minute != 0:
+        raise ValueError(
+            f"Zeitangabe '{time_str}': Der KSEM unterstützt nur volle Stunden (z. B. '04:00'). "
+            f"Minuten werden vom Gerät ignoriert und müssen 00 sein."
+        )
+    return hour, minute
 
 
 def _build_timebased_schedule(windows: list) -> list:

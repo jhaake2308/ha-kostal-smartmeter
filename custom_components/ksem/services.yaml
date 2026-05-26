@@ -7,12 +7,14 @@ set_timebased_charge:
     Wochentag: Ganzzahl (0=Sonntag, 1=Montag, 2=Dienstag, 3=Mittwoch, 4=Donnerstag, 5=Freitag, 6=Samstag)
     oder deutscher Wochentagsname (Montag, Dienstag … Sonntag, auch als Kürzel: Mo, Di, Mi, Do, Fr, Sa, So).
     Lademodus pro Fenster (mode): grid = Power Mode (Standard), pv = Solar Pure, hybrid = Solar Plus.
+    WICHTIG: Der KSEM unterstützt nur volle Stunden – Minuten müssen immer 00 sein (z. B. 04:00, nicht 04:30).
+    Das gilt auch für automatisierte Aufrufe, z. B. aus einer Strompreis-Automatisierung.
   fields:
     windows:
       name: Ladefenster
       description: >
         Liste von Zeitfenstern. Pflichtfelder: weekday (Zahl 0–6 oder Wochentagsname,
-        z. B. "Donnerstag" oder "Do"), start (HH:MM), end (HH:MM).
+        z. B. "Donnerstag" oder "Do"), start (HH:00), end (HH:00) – nur volle Stunden.
         Optional: mode (grid | pv | hybrid, Standard: grid).
       required: true
       example: '[{"weekday": "Donnerstag", "start": "04:00", "end": "07:00", "mode": "grid"}]'
