@@ -16,15 +16,26 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    - `set_charge_mode(mode="time")` → **400 Bad Request** – "time" ist kein gültiger API-Modus;
      erlaubt sind nur: `grid | pv | hybrid | lock`. Aufruf wurde entfernt.
    - Der Zeitplan aktiviert sich ohne expliziten chargemode-Aufruf von selbst ✓
-   - `_CHARGE_MODE_INT`: `grid=1` bestätigt (HAR), `pv=2` und `hybrid=3` plausibel aber **ungetestet**
+   - `_CHARGE_MODE_INT`: `grid=1` ✓, `pv=2` ✓, `hybrid=3` ✓ – alle drei bestätigt (2026-05-26)
    - Wochentagnamen (Deutsch, kurz/lang) werden jetzt im Schema akzeptiert ✓
    - Optionales Feld `mode` (grid/pv/hybrid) pro Ladefenster implementiert ✓
+   - `clear_timebased_charge` + anschließender Lock-Mode-Wechsel: funktioniert, kein Fehler im Log ✓
+   - **Granularität:** KSEM unterstützt offenbar nur stundenbasierte Zeitslots (Minuten werden ignoriert)
+   - Coordinator-Refresh (60s): Modus bleibt aktiv, kein ungewolltes Zurückspringen ✓
+   - HA zeigt während aktivem Zeitplan "Lock Mode" – technisch korrekt (KSEM meldet lock als Basismodus)
+
+   **Testergebnisse (alpha.13, 2026-05-26):**
+   | # | Testfall | Ergebnis |
+   |---|----------|---------|
+   | 1 | `mode: hybrid` | Solar Plus Mode ✓ |
+   | 2 | `clear_timebased_charge` | Zeitplan geleert + Lock Mode in HA ✓ |
+   | 3 | Zeitplan-Granularität | Nur stundenbasiert (Minuten ggf. ignoriert) |
+   | 5 | HA-Neustart mit aktivem Zeitplan | Pending |
+   | 6 | Coordinator-Refresh 60s | Modus bleibt stabil ✓ |
 
    **TODO (offen): Anzeige ob Zeitplan aktiv ist**
    - GET-Endpunkt nicht vorhanden → lokaler State nötig
-   - Geplant: `binary_sensor.ksem_zeitplan_aktiv` via `RestoreEntity` + Dispatcher-Signal
-     (wird `on` nach `set_timebased_charge`, `off` nach `clear_timebased_charge`)
-   - Attribut: definierte Fenster (damit sichtbar *was* geplant ist, nicht nur *ob*)
+   - Einfachster Ansatz: Flag in `hass.data` + Override in `KsemChargeModeSelect.current_option`
    - **Noch nicht implementiert** – bewusst zurückgestellt
 2) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
 
