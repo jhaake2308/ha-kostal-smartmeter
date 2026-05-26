@@ -36,8 +36,86 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    **TODO (offen): Anzeige ob Zeitplan aktiv ist**
    - GET-Endpunkt nicht vorhanden → lokaler State nötig
    - Einfachster Ansatz: Flag in `hass.data` + Override in `KsemChargeModeSelect.current_option`
-   - **Noch nicht implementiert** – bewusst zurückgestellt
-2) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
+   - **Gelöst in alpha.14** über `KsemActiveScheduleSensor` + Dispatcher-Signal
+
+2) ~~evcc-Strompreis-Integration~~ → **DONE (alpha.14)** (Branch `feature/evcc-cheapest-charging`)
+
+   **Neue Entitäten / Services:**
+
+   | Was | Typ | Name in HA |
+   |-----|-----|------------|
+   | Günstigste Slots planen | Button | "Günstig laden planen" |
+   | Zeitplan löschen | Button | "Zeitplan löschen" |
+   | Aktiven Zeitplan anzeigen | Sensor (RestoreEntity) | "Aktive Ladefenster" |
+   | Slots aus evcc wählen | Service | `ksem.set_cheapest_charge_windows` |
+
+   **evcc REST API:**
+   - `GET http://<evcc_host>:7070/api/tariff/grid`
+   - Antwort: `{"result": {"rates": [{"start": "ISO", "end": "ISO", "price": float}, ...]}}`
+   - Kein Auth nötig, Timeout 10 s
+
+   **Logik `set_cheapest_charge_windows`:**
+   1. evcc-URL aus Config-Entry lesen (oder Service-Parameter – überschreibt Config)
+   2. `GET /api/tariff/grid` abrufen
+   3. Rates auf Suchfenster (`search_from`–`search_until`, Mitternacht-Überspannung möglich) filtern
+   4. Günstigste N Stunden (`hours_needed`) nach Preis aufsteigend sortieren
+   5. UTC-Slots → Lokale Zeit → KSEM-Wochentag (Python 0=Mo → KSEM 0=So, 1=Mo … 6=Sa)
+   6. `set_timebased_charge` mit erzeugten Fenstern aufrufen
+   7. `SIGNAL_SCHEDULE_UPDATED` feuern → `KsemActiveScheduleSensor` aktualisiert sich
+
+   **Config-Flow Schritt 2 (optional, überspringbar):**
+   - Felder: `evcc_url`, `evcc_hours_needed` (1–8, default 3),
+     `evcc_search_from` (default "22:00"), `evcc_search_until` (default "06:00"),
+     `evcc_mode` (grid/pv/hybrid, default grid)
+   - URL-Feld leer lassen = Schritt überspringen
+
+   **Wöchentlich wiederkehrender Plan – wichtig für den Betrieb:**
+
+   Der KSEM speichert einen **wöchentlich wiederkehrenden** Zeitplan, keine Einmal-Termine.
+   Wird der Service z. B. am Montag-Abend mit Slots Di 01:00–02:00 und Di 04:00–05:00 aufgerufen,
+   feuert dieser Plan **nächste Woche Dienstag erneut automatisch** – mit den Preisen von letzter Woche.
+
+   Empfohlene Betriebsstrategie: Den Service täglich per HA-Automation aufrufen, so dass der Plan
+   jeden Abend mit frischen Preisen überschrieben wird.
+
+   **Empfohlene HA-Automation:**
+
+   ```yaml
+   # Automation 1: Jeden Abend günstigste Ladefenster aus evcc planen
+   - alias: "KSEM – Günstige Ladefenster planen"
+     trigger:
+       - platform: time
+         at: "21:00:00"
+     action:
+       - service: ksem.set_cheapest_charge_windows
+         data: {}  # alle Parameter kommen aus der Integration (Config-Entry)
+
+   # Automation 2: Morgens Zeitplan löschen (verhindert ungewolltes
+   # Wiederholen falls der Abend-Aufruf mal ausbleibt)
+   - alias: "KSEM – Ladeplan morgens aufräumen"
+     trigger:
+       - platform: time
+         at: "07:00:00"
+     action:
+       - service: ksem.clear_timebased_charge
+         data: {}
+   ```
+
+   Ablauf mit beiden Automationen:
+   - 21:00 Uhr: Plan mit günstigsten Stunden der kommenden Nacht setzen
+   - Laden startet/stoppt automatisch zur gesetzten Zeit
+   - 07:00 Uhr: Plan leeren; KSEM wechselt auf Lock-Mode
+   - Kommen keine evcc-Daten → kein Plan, kein Fehler, nur Warning im HA-Log
+
+   **Fehlerbehandlung:**
+   - `evcc_url` fehlt/leer → Warning, kein Schedule, kein Absturz
+   - HTTP-Fehler (Timeout, 4xx/5xx) → Error-Log, kein Schedule
+   - Keine Rates im Suchfenster → Warning, bestehender Schedule bleibt unverändert
+   - Syntaxfehler in einzelnen Rates → betroffener Slot übersprungen, Rest wird verarbeitet
+
+   **Status (alpha.14):** Implementiert, Syntaxcheck OK. Noch nicht auf echter Hardware getestet.
+
+3) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
 
 ## Status Quo (v2.0.0-alpha.10)
 
@@ -76,6 +154,9 @@ internen Ladestart des KSEM blockiert hat.
 | Min Charging Power Quota | `number.py` | `ksem_wallbox` (Chargemode-Snapshot) | 60 s |
 | Phasenumschaltung | `select.py` | `ksem_wallbox` | 60 s |
 | Battery Usage | `switch.py` | `ksem_wallbox` | 60 s |
+| Aktive Ladefenster | `sensor.py` | Dispatcher `SIGNAL_SCHEDULE_UPDATED` | bei Änderung |
+| Button: Günstig laden planen | `button.py` | – (ruft Service auf) | – |
+| Button: Zeitplan löschen | `button.py` | – (ruft Service auf) | – |
 
 ### Behobene Bugs & Änderungen
 
@@ -93,3 +174,5 @@ internen Ladestart des KSEM blockiert hat.
 - **Enector_\*-Sensoren** erscheinen aktuell unter dem Smartmeter-Gerät statt unter der Wallbox, wenn die Wallbox beim Start noch nicht erreichbar ist (race condition beim ersten Coordinator-Refresh).
 - **Wallbox-Zustandsstream** (`stateConnected`, `stateCharging` etc.) via JSON-WebSocket (`ws://.../ws/json/json/local/evse/+/state`) ist nicht implementiert.
 - **Wallbox-Protobuf-Stream** (Strom/Spannung je Phase) ist nicht implementiert (`.proto`-Schema nicht vorliegend).
+- **KSEM-Zeitplan ist wöchentlich wiederkehrend** – ohne tägliche HA-Automation (siehe Todo 2) wiederholen sich die gesetzten Fenster jede Woche. Empfehlung: Automation täglich ~21 Uhr (Plan setzen) + ~07 Uhr (Plan leeren).
+- **evcc-Feature noch ungetestet auf echter Hardware** (alpha.14, 2026-05-26).
