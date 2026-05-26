@@ -1,14 +1,14 @@
 set_timebased_charge:
   name: Zeitbasierten Ladeplan setzen
   description: >
-    Setzt Zeitfenster, in denen die Wallbox laden soll.
+    "Setzt Zeitfenster, in denen die Wallbox laden soll.
     Alle nicht abgedeckten Zeiten werden auf "nicht laden" gesetzt.
     Fenster über Mitternacht werden nicht unterstützt.
     Wochentag: Ganzzahl (0=Sonntag, 1=Montag, 2=Dienstag, 3=Mittwoch, 4=Donnerstag, 5=Freitag, 6=Samstag)
     oder deutscher Wochentagsname (Montag, Dienstag … Sonntag, auch als Kürzel: Mo, Di, Mi, Do, Fr, Sa, So).
     Lademodus pro Fenster (mode): grid = Power Mode (Standard), pv = Solar Pure, hybrid = Solar Plus.
     WICHTIG: Der KSEM unterstützt nur volle Stunden – Minuten müssen immer 00 sein (z. B. 04:00, nicht 04:30).
-    Das gilt auch für automatisierte Aufrufe, z. B. aus einer Strompreis-Automatisierung.
+    Das gilt auch für automatisierte Aufrufe, z. B. aus einer Strompreis-Automatisierung."
   fields:
     windows:
       name: Ladefenster
@@ -28,12 +28,12 @@ clear_timebased_charge:
 set_cheapest_charge_windows:
   name: Günstigste Ladefenster setzen
   description: >
-    Ruft die aktuellen Strompreise von evcc ab und setzt automatisch die günstigsten
+    "Ruft die aktuellen Strompreise von evcc ab und setzt automatisch die günstigsten
     Stunden als Ladefenster. Die evcc-URL sowie das Suchfenster (search_from/search_until)
     und die benötigte Stundenzahl (hours_needed) können in der KSEM-Integration konfiguriert
     werden oder als optionale Service-Parameter übergeben werden.
     Wenn keine Preisdaten für die kommende Nacht im definierten Fenster verfügbar sind,
-    wird kein Zeitplan gesetzt (und der bestehende nicht überschrieben).
+    wird kein Zeitplan gesetzt (und der bestehende nicht überschrieben)."
   fields:
     evcc_url:
       name: evcc URL
