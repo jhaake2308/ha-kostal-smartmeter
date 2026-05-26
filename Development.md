@@ -4,12 +4,28 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Todo ##
 
-1) ~~"time" modus implementieren~~ → **DONE (alpha.11)**
+1) ~~"time" modus implementieren~~ → **DONE (alpha.11/alpha.12)**
    - Service `ksem.set_timebased_charge` implementiert (windows-Liste → KSEM-Kantenformat)
    - Service `ksem.clear_timebased_charge` implementiert (alles zurücksetzen)
    - API: `PUT /api/e-mobility/timebasedCharge`, charge_mode 0/1, weekday 0=So..6=Sa
    - Anbindung an Strompreis-Extension steht noch aus (Extension wird erhoben)
-   - **TODO (offen):** GET /api/e-mobility/timebasedCharge implementieren (aktuellen Plan in HA lesen)
+
+   **Erkenntnisse aus Tests (alpha.12, 2026-05-26):**
+   - `PUT /api/e-mobility/timebasedCharge` funktioniert, Zeitplan wird korrekt übernommen ✓
+   - `GET /api/e-mobility/timebasedCharge` → **404** – Endpunkt existiert nicht (nur PUT, wie bei chargemode)
+   - `set_charge_mode(mode="time")` → **400 Bad Request** – "time" ist kein gültiger API-Modus;
+     erlaubt sind nur: `grid | pv | hybrid | lock`. Aufruf wurde entfernt.
+   - Der Zeitplan aktiviert sich ohne expliziten chargemode-Aufruf von selbst ✓
+   - `_CHARGE_MODE_INT`: `grid=1` bestätigt (HAR), `pv=2` und `hybrid=3` plausibel aber **ungetestet**
+   - Wochentagnamen (Deutsch, kurz/lang) werden jetzt im Schema akzeptiert ✓
+   - Optionales Feld `mode` (grid/pv/hybrid) pro Ladefenster implementiert ✓
+
+   **TODO (offen): Anzeige ob Zeitplan aktiv ist**
+   - GET-Endpunkt nicht vorhanden → lokaler State nötig
+   - Geplant: `binary_sensor.ksem_zeitplan_aktiv` via `RestoreEntity` + Dispatcher-Signal
+     (wird `on` nach `set_timebased_charge`, `off` nach `clear_timebased_charge`)
+   - Attribut: definierte Fenster (damit sichtbar *was* geplant ist, nicht nur *ob*)
+   - **Noch nicht implementiert** – bewusst zurückgestellt
 2) Die Verbindung zu HA blockiert auch in Version 2.0.0Alpha10 weiterhin das konstante Laden des PKW im Solar Mode, nach einigen Minuten wird das Laden pausiert, Meldung in der Wallbox: "Auf Ladefreigabe wird gewartet" o.ä. -> Debugging nötig. Siehe unten "Behobene Bugs & Änderungen" - ich vermute wir müssen weiter vereinfachen.
 
 ## Status Quo (v2.0.0-alpha.10)

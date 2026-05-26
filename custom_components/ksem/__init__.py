@@ -17,11 +17,54 @@ PLATFORMS = ["sensor", "number", "select", "switch"]
 
 # --- Zeitbasiertes Laden: Hilfsfunktionen ---
 
+# Wochentag-Konvention: 0=Sonntag, 1=Montag … 6=Samstag
+_WEEKDAY_NAME_MAP: dict[str, int] = {
+    "montag": 1, "mo": 1,
+    "dienstag": 2, "di": 2,
+    "mittwoch": 3, "mi": 3,
+    "donnerstag": 4, "do": 4,
+    "freitag": 5, "fr": 5,
+    "samstag": 6, "sa": 6,
+    "sonntag": 0, "so": 0,
+}
+
+
+def _coerce_weekday(value) -> int:
+    """Akzeptiert Ganzzahlen 0–6 sowie deutsche Wochentagsnamen (auch abgekürzt)."""
+    if isinstance(value, int):
+        if not 0 <= value <= 6:
+            raise vol.Invalid(f"weekday muss zwischen 0 und 6 liegen, nicht {value}")
+        return value
+    if isinstance(value, str):
+        key = value.strip().lower()
+        if key in _WEEKDAY_NAME_MAP:
+            return _WEEKDAY_NAME_MAP[key]
+        raise vol.Invalid(
+            f"Unbekannter Wochentag '{value}'. "
+            "Erlaubt: Ganzzahl 0–6 oder Wochentagsname "
+            "(z. B. Montag, Di, Mittwoch …)"
+        )
+    raise vol.Invalid(f"weekday muss eine Zahl oder ein Wochentagsname sein, nicht {type(value).__name__}")
+
+
+# Lademodus-Mapping für zeitbasiertes Laden.
+# Bestätigte Werte aus HAR: 0=nicht laden, 1=grid.
+# Werte 2 (pv) und 3 (hybrid) sind plausibel, aber noch unbestätigt – bitte testen.
+_CHARGE_MODE_INT: dict[str, int] = {
+    "grid": 1,
+    "pv": 2,
+    "hybrid": 3,
+}
+
+
 _WINDOW_SCHEMA = vol.Schema(
     {
-        vol.Required("weekday"): vol.All(int, vol.Range(min=0, max=6)),
+        vol.Required("weekday"): _coerce_weekday,
         vol.Required("start"): str,
         vol.Required("end"): str,
+        vol.Optional("mode", default="grid"): vol.All(
+            str, vol.In(list(_CHARGE_MODE_INT.keys()))
+        ),
     }
 )
 
@@ -54,7 +97,8 @@ def _build_timebased_schedule(windows: list) -> list:
         wd = int(w["weekday"])
         sh, sm = _parse_hhmm(w["start"])
         eh, em = _parse_hhmm(w["end"])
-        edges[(wd, sh, sm)] = 1  # Ladestart
+        mode_int = _CHARGE_MODE_INT.get(w.get("mode", "grid"), 1)
+        edges[(wd, sh, sm)] = mode_int  # Ladestart mit gewähltem Modus
         if not (eh == 0 and em == 0):
             # 00:00 als Ende würde die Default-Kante redundant überschreiben
             edges[(wd, eh, em)] = 0  # Ladestop
@@ -245,17 +289,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schedule = _build_timebased_schedule(call.data["windows"])
         _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM", len(schedule))
         await data["client"].set_timebased_charge(schedule)
-        # Lademodus auf "time" stellen, damit der Zeitplan auch aktiv wird
-        await data["client"].set_charge_mode(mode="time")
 
     async def _handle_clear_timebased_charge(call):
-        """Service ksem.clear_timebased_charge – setzt Ladeplan auf 'alles aus'."""
+        """Service ksem.clear_timebased_charge – setzt Ladeplan auf 'alles aus' und wechselt zurück auf Lock-Mode."""
         data = next(iter(hass.data.get(DOMAIN, {}).values()), None)
         if not data:
             _LOGGER.error("clear_timebased_charge: keine aktive KSEM-Integration gefunden")
             return
         _LOGGER.info("clear_timebased_charge: setze kompletten Zeitplan zurück")
         await data["client"].clear_timebased_charge()
+        # Explizit auf Lock-Mode schalten, damit HA den Zustand korrekt widerspiegelt.
+        # Ohne diesen Aufruf bleibt die Wallbox intern im Time-Mode (auch wenn alle
+        # Slots auf 0 stehen), und HA zeigt weiterhin den alten Modus.
+        await data["client"].set_charge_mode(mode="lock")
 
     if not hass.services.has_service(DOMAIN, "set_timebased_charge"):
         hass.services.async_register(
