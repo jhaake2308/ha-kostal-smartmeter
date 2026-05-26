@@ -1,10 +1,12 @@
 import logging
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
-from .const import DOMAIN
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.restore_state import RestoreEntity
+from .const import DOMAIN, SIGNAL_SCHEDULE_UPDATED
 from homeassistant.helpers.entity import EntityCategory
 from .helper import first_evse_from_coordinator
 from .modbus_map import SENSOR_DEFINITIONS
@@ -122,9 +124,14 @@ async def async_setup_entry(
         )
         obis_entities.append(KsemObisModbusSensor(modbus, addr, spec, info))
 
-    # 5) jetzt alles hinzufügen
+    # 5) Aktiver-Zeitplan-Sensor
+    schedule_sensor = KsemActiveScheduleSensor(
+        hass, entry.entry_id, wallbox_device_info or device_info
+    )
+
+    # 6) jetzt alles hinzufügen
     async_add_entities(
-        smartmeter_entities + wallbox_entities + more_entities + obis_entities
+        smartmeter_entities + wallbox_entities + more_entities + obis_entities + [schedule_sensor]
     )
 
     # 6) Falls beim Start noch keine WB da war: später automatisch nachziehen
@@ -313,4 +320,65 @@ class KsemObisModbusSensor(CoordinatorEntity, SensorEntity):
         if self._mapping:
             return self._mapping.get(int(val), f"Unbekannt ({val})")
         return val
+
+
+class KsemActiveScheduleSensor(RestoreEntity, SensorEntity):
+    """Zeigt die aktuell gesetzten Ladefenster an und persistiert sie über HA-Neustarts."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry_id: str,
+        device_info: DeviceInfo,
+    ) -> None:
+        self.hass = hass
+        self._attr_name = "Aktive Ladefenster"
+        self._attr_unique_id = f"ksem_{entry_id}_active_schedule"
+        self._attr_device_info = device_info
+        self._attr_icon = "mdi:calendar-clock"
+        self._state: str = "kein Zeitplan"
+        self._windows: list = []
+        self._readable: list = []
+        self._unsub = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # Letzten Zustand nach HA-Neustart wiederherstellen
+        last = await self.async_get_last_state()
+        if last and last.state not in ("unknown", "unavailable", None):
+            self._state = last.state
+            attrs = last.attributes or {}
+            self._windows = list(attrs.get("fenster", []))
+            self._readable = list(attrs.get("fenster_lesbar", []))
+        # Dispatcher-Signal abonnieren
+        self._unsub = async_dispatcher_connect(
+            self.hass, SIGNAL_SCHEDULE_UPDATED, self._handle_update
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._unsub:
+            self._unsub()
+
+    @callback
+    def _handle_update(self, windows: list | None, readable: list | None) -> None:
+        if windows:
+            self._state = "aktiv"
+            self._windows = list(windows)
+            self._readable = list(readable) if readable else []
+        else:
+            self._state = "kein Zeitplan"
+            self._windows = []
+            self._readable = []
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._state
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "fenster": self._windows,
+            "fenster_lesbar": self._readable,
+        }
 

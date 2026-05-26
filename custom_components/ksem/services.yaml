@@ -24,3 +24,45 @@ clear_timebased_charge:
   description: >
     Setzt den gesamten Ladeplan zurück – alle 7 Tage werden auf "nicht laden" gesetzt.
     Setzt anschließend die Wallbox auf lock-mode (ohne Zeitplan).
+
+set_cheapest_charge_windows:
+  name: Günstigste Ladefenster setzen
+  description: >
+    Ruft die aktuellen Strompreise von evcc ab und setzt automatisch die günstigsten
+    Stunden als Ladefenster. Die evcc-URL sowie das Suchfenster (search_from/search_until)
+    und die benötigte Stundenzahl (hours_needed) können in der KSEM-Integration konfiguriert
+    werden oder als optionale Service-Parameter übergeben werden.
+    Wenn keine Preisdaten für die kommende Nacht im definierten Fenster verfügbar sind,
+    wird kein Zeitplan gesetzt (und der bestehende nicht überschrieben).
+  fields:
+    evcc_url:
+      name: evcc URL
+      description: >
+        URL der evcc-Instanz (optional, überschreibt die gespeicherte Konfiguration).
+        Beispiel: http://192.168.1.50:7070
+      required: false
+      example: "http://192.168.1.50:7070"
+    hours_needed:
+      name: Benötigte Stunden
+      description: Anzahl der günstigsten Stunden die gesetzt werden sollen (1–8). Standard: 3.
+      required: false
+      example: 3
+    search_from:
+      name: Suche ab (HH:00)
+      description: Stunde ab der günstige Slots gesucht werden (volle Stunde). Standard: 22:00.
+      required: false
+      example: "22:00"
+    search_until:
+      name: Suche bis (HH:00)
+      description: >
+        Stunde bis zu der günstige Slots gesucht werden (volle Stunde, kann Mitternacht
+        überspannen). Standard: 06:00.
+      required: false
+      example: "06:00"
+    mode:
+      name: Lademodus
+      description: >
+        Lademodus für die gewählten Fenster: grid (Power Mode), pv (Solar Pure),
+        hybrid (Solar Plus). Standard: grid.
+      required: false
+      example: "grid"
