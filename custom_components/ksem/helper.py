@@ -17,3 +17,8 @@ def first_evse_from_coordinator(coord) -> dict | None:
         if wb.get("available"):
             return wb
     return evses[0]  # Fallback: erste, auch wenn offline
+
+
+import logging
+import datetime
+

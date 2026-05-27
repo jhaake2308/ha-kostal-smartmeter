@@ -92,29 +92,55 @@ def _parse_hhmm(time_str: str) -> tuple[int, int]:
     return hour, minute
 
 
-def _build_timebased_schedule(windows: list) -> list:
-    """Konvertiert Zeitfenster (Mensch-freundlich) in das KSEM-Kantenformat.
 
-    Wochentag (KSEM-Konvention): 1=Montag, 2=Dienstag, 3=Mittwoch, 4=Donnerstag,
-    5=Freitag, 6=Samstag, 0=Sonntag.
-    Jeder Tag bekommt automatisch eine Default-Kante 00:00=0 (nicht laden).
-    Für jedes Fenster wird eine Ein-Kante (start) und, wenn end != 00:00,
-    eine Aus-Kante (end) gesetzt. Überschneidende Kanten: letzter Wert gewinnt.
-    Fenster über Mitternacht sind nicht unterstützt.
+# Robuste Zeitfenster-Parsing- und Validierungslogik (ersetzt helper.py-Variante)
+def _build_timebased_schedule(windows: list, logger=None) -> list:
     """
+    Konvertiert und validiert Zeitfenster (Mensch-freundlich) in das KSEM-Kantenformat.
+    Erkennt 15-Minuten- und 1-Stunden-Takte, loggt/skippt fehlerhafte Fenster, unterstützt Überläufe über Mitternacht.
+    """
+    import logging
+    import datetime
+    if logger is None:
+        logger = _LOGGER
     edges: dict[tuple, int] = {}
     for wd in range(7):
         edges[(wd, 0, 0)] = 0  # Default: nicht laden
 
     for w in windows:
-        wd = int(w["weekday"])
-        sh, sm = _parse_hhmm(w["start"])
-        eh, em = _parse_hhmm(w["end"])
-        mode_int = _CHARGE_MODE_INT.get(w.get("mode", "grid"), 1)
-        edges[(wd, sh, sm)] = mode_int  # Ladestart mit gewähltem Modus
-        if not (eh == 0 and em == 0):
-            # 00:00 als Ende würde die Default-Kante redundant überschreiben
-            edges[(wd, eh, em)] = 0  # Ladestop
+        try:
+            wd = int(w["weekday"])
+            sh, sm = map(int, w["start"].split(":"))
+            eh, em = map(int, w["end"].split(":"))
+            mode_int = _CHARGE_MODE_INT.get(w.get("mode", "grid"), 1)
+            start = datetime.time(sh, sm)
+            end = datetime.time(eh, em)
+            # Takt berechnen (z.B. 15min, 1h)
+            delta = (datetime.datetime.combine(datetime.date.today(), end) -
+                     datetime.datetime.combine(datetime.date.today(), start))
+            if delta.total_seconds() < 0:
+                # Über Mitternacht
+                delta = (datetime.datetime.combine(datetime.date.today(), datetime.time(23,59,59)) -
+                         datetime.datetime.combine(datetime.date.today(), start)) + \
+                        (datetime.datetime.combine(datetime.date.today(), end) -
+                         datetime.datetime.combine(datetime.date.today(), datetime.time(0,0))) + \
+                        datetime.timedelta(seconds=1)
+            minutes = int(delta.total_seconds() // 60)
+            if minutes % 15 == 0:
+                takt = 15
+            elif minutes % 60 == 0:
+                takt = 60
+            else:
+                takt = None
+            if takt is None:
+                logger.warning(f"Ungültiges Zeitfenster (kein 15min/1h-Takt): {w}")
+                continue
+            edges[(wd, sh, sm)] = mode_int  # Ladestart mit gewähltem Modus
+            if not (eh == 0 and em == 0):
+                edges[(wd, eh, em)] = 0  # Ladestop
+        except Exception as e:
+            logger.error(f"Fehler beim Parsen/Validieren von Zeitfenster {w}: {e}")
+            continue
 
     return [
         {"weekday": wd, "start_hour": h, "start_minute": m, "charge_mode": mode}
@@ -181,7 +207,10 @@ def _select_cheapest_slots(
         try:
             start_s = (rate.get("start") or "").replace("Z", "+00:00")
             end_s = (rate.get("end") or "").replace("Z", "+00:00")
-            price = rate.get("price")
+            # Preisfeld kann 'value' (API) oder 'price' (intern) heißen
+            price = rate.get("value")
+            if price is None:
+                price = rate.get("price")
             if price is None:
                 continue
             start_dt = datetime.fromisoformat(start_s)
