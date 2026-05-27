@@ -164,7 +164,8 @@ async def _fetch_evcc_tariff(hass: HomeAssistant, evcc_url: str) -> list:
             resp = await session.get(url)
         resp.raise_for_status()
         payload = await resp.json()
-        return payload.get("result", {}).get("rates", [])
+        # Unterstütze beide Formate: {"rates": [...]} und {"result": {"rates": [...]}}
+        return payload.get("result", {}).get("rates", []) or payload.get("rates", [])
     except Exception as err:
         raise RuntimeError(f"evcc Tariff-Abruf fehlgeschlagen ({url}): {err}") from err
 
