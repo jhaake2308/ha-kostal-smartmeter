@@ -202,28 +202,38 @@ def _select_cheapest_slots(
     window_start_utc = window_start.astimezone(timezone.utc)
     window_end_utc = window_end.astimezone(timezone.utc)
 
-    candidates = []
+    candidates: list = []
+    _LOGGER.debug("_select_cheapest_slots: Eingabeparameter: search_from_h=%s, search_until_h=%s, hours_needed=%s", search_from_h, search_until_h, hours_needed)
+    _LOGGER.debug("_select_cheapest_slots: Anzahl geladener Preisdaten: %d", len(rates))
+    filtered = 0
+    skipped = 0
     for rate in rates:
         try:
             start_s = (rate.get("start") or "").replace("Z", "+00:00")
             end_s = (rate.get("end") or "").replace("Z", "+00:00")
-            # Preisfeld kann 'value' (API) oder 'price' (intern) heißen
             price = rate.get("value")
             if price is None:
                 price = rate.get("price")
             if price is None:
+                skipped += 1
+                _LOGGER.debug("_select_cheapest_slots: Preis fehlt in Rate: %s", rate)
                 continue
             start_dt = datetime.fromisoformat(start_s)
             end_dt = datetime.fromisoformat(end_s)
-        except (KeyError, ValueError, TypeError):
+        except (KeyError, ValueError, TypeError) as e:
+            skipped += 1
+            _LOGGER.debug("_select_cheapest_slots: Fehler beim Parsen einer Rate (%s): %s", rate, e)
             continue
         if start_dt >= window_start_utc and end_dt <= window_end_utc:
             candidates.append({"start": start_dt, "end": end_dt, "price": float(price)})
-
+            filtered += 1
+    _LOGGER.debug("_select_cheapest_slots: %d Rates übersprungen, %d Kandidaten im Zeitfenster gefunden", skipped, filtered)
     if not candidates:
+        _LOGGER.info("_select_cheapest_slots: Keine Kandidaten im Zeitfenster gefunden. (Preisdaten: %d, übersprungen: %d)", len(rates), skipped)
         return []
-
     candidates.sort(key=lambda x: x["price"])
+    if len(candidates) < hours_needed:
+        _LOGGER.info("_select_cheapest_slots: Zu wenige Kandidaten (%d) für benötigte Stunden (%d)", len(candidates), hours_needed)
     return candidates[:hours_needed]
 
 
@@ -521,10 +531,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         slots = _select_cheapest_slots(rates, search_from_h, search_until_h, hours_needed)
         if not slots:
             _LOGGER.warning(
-                "set_cheapest_charge_windows: Keine Preisdaten für die kommende Nacht "
-                "im Fenster %s–%s verfügbar. Kein Zeitplan gesetzt.",
+                "set_cheapest_charge_windows: Kein Zeitfenster gesetzt. Details siehe vorherige Debug-/Info-Logs (_select_cheapest_slots). "
+                "Parameter: search_from=%s, search_until=%s, hours_needed=%s, evcc_url=%s, mode=%s, Preisdaten=%d",
                 search_from,
                 search_until,
+                hours_needed,
+                evcc_url,
+                mode,
+                len(rates),
             )
             return
 
