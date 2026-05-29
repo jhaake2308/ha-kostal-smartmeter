@@ -245,22 +245,58 @@ def _slots_to_windows(slots: list, mode: str) -> tuple[list, list]:
     """
     from homeassistant.util import dt as dt_util
 
-    windows: list = []
-    readable: list = []
+    # 1. Slots nach Tag gruppieren
+    from collections import defaultdict
+    slots_by_day = defaultdict(list)
     for slot in slots:
         local_start = dt_util.as_local(slot["start"])
         local_end = dt_util.as_local(slot["end"])
-        # Python weekday: 0=Mo … 6=So  →  KSEM: 0=So, 1=Mo … 6=Sa
         ksem_wd = (local_start.weekday() + 1) % 7
-        start_str = f"{local_start.hour:02d}:00"
-        end_str = f"{local_end.hour:02d}:00"
-        windows.append(
-            {"weekday": ksem_wd, "start": start_str, "end": end_str, "mode": mode}
-        )
-        day_name = _WEEKDAY_KSEM_NAME.get(ksem_wd, str(ksem_wd))
-        readable.append(
-            f"{day_name} {start_str}\u2013{end_str} ({mode}, {slot['price']:.4f} \u20ac/kWh)"
-        )
+        slots_by_day[ksem_wd].append((local_start, local_end, slot["price"]))
+
+    windows = []
+    readable = []
+    for wd, slotlist in slots_by_day.items():
+        # 2. Slots sortieren und zu Stundenblöcken zusammenfassen
+        slotlist.sort()
+        hour_blocks = []
+        block_start = None
+        block_end = None
+        block_prices = []
+        for start, end, price in slotlist:
+            # Runde Start auf volle Stunde ab, Ende auf volle Stunde auf
+            start_hour = start.replace(minute=0, second=0, microsecond=0)
+            if end.minute > 0 or end.second > 0 or end.microsecond > 0:
+                end_hour = (end + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            else:
+                end_hour = end
+            # Starte neuen Block oder erweitere
+            if block_start is None:
+                block_start = start_hour
+                block_end = end_hour
+                block_prices = [price]
+            elif start_hour <= block_end:
+                # Überlappend/zusammenhängend
+                block_end = max(block_end, end_hour)
+                block_prices.append(price)
+            else:
+                hour_blocks.append((block_start, block_end, block_prices))
+                block_start = start_hour
+                block_end = end_hour
+                block_prices = [price]
+        if block_start is not None:
+            hour_blocks.append((block_start, block_end, block_prices))
+
+        for block_start, block_end, prices in hour_blocks:
+            if block_end <= block_start:
+                _LOGGER.warning(f"Verworfenes Zeitfenster (Ende <= Start): {block_start}–{block_end}")
+                continue
+            start_str = f"{block_start.hour:02d}:00"
+            end_str = f"{block_end.hour:02d}:00"
+            windows.append({"weekday": wd, "start": start_str, "end": end_str, "mode": mode})
+            day_name = _WEEKDAY_KSEM_NAME.get(wd, str(wd))
+            avg_price = sum(prices) / len(prices) if prices else 0.0
+            readable.append(f"{day_name} {start_str}\u2013{end_str} ({mode}, {avg_price:.4f} \u20ac/kWh)")
     return windows, readable
 
 
