@@ -232,10 +232,31 @@ def _select_cheapest_slots(
     if not candidates:
         _LOGGER.info("_select_cheapest_slots: Keine Kandidaten im Zeitfenster gefunden. (Preisdaten: %d, übersprungen: %d)", len(rates), skipped)
         return []
-    candidates.sort(key=lambda x: x["price"])
-    if len(candidates) < hours_needed:
-        _LOGGER.info("_select_cheapest_slots: Zu wenige Kandidaten (%d) für benötigte Stunden (%d)", len(candidates), hours_needed)
-    return candidates[:hours_needed]
+
+    # Gruppiere alle Kandidaten nach voller Stunde und berechne den Durchschnittspreis pro Stunde
+    from collections import defaultdict
+    hour_prices = defaultdict(list)
+    for rate in candidates:
+        start = rate["start"]
+        hour = start.replace(minute=0, second=0, microsecond=0)
+        hour_prices[hour].append(rate["price"])
+    # Durchschnittspreis pro Stunde berechnen
+    hour_avg = [(hour, sum(prices)/len(prices)) for hour, prices in hour_prices.items()]
+    # Nach Preis sortieren und die günstigsten N Stunden wählen
+    hour_avg.sort(key=lambda x: x[1])
+    best_hours = [h for h, _ in hour_avg[:hours_needed]]
+    # Für jede gewählte Stunde einen Slot zurückgeben (jeweils 1h)
+    slots = []
+    for hour in best_hours:
+        slot = {
+            "start": hour,
+            "end": hour + timedelta(hours=1),
+            "price": sum(hour_prices[hour])/len(hour_prices[hour])
+        }
+        slots.append(slot)
+    if len(slots) < hours_needed:
+        _LOGGER.info("_select_cheapest_slots: Zu wenige Stundenblöcke (%d) für benötigte Stunden (%d)", len(slots), hours_needed)
+    return slots
 
 
 def _slots_to_windows(slots: list, mode: str) -> tuple[list, list]:
