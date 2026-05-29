@@ -204,8 +204,8 @@ def _select_cheapest_slots(
     window_end_utc = window_end.astimezone(timezone.utc)
 
     candidates: list = []
-    _LOGGER.debug("_select_cheapest_slots: Eingabeparameter: search_from_h=%s, search_until_h=%s, hours_needed=%s", search_from_h, search_until_h, hours_needed)
-    _LOGGER.debug("_select_cheapest_slots: Anzahl geladener Preisdaten: %d", len(rates))
+    _LOGGER.info("_select_cheapest_slots: Eingabeparameter: search_from_h=%s, search_until_h=%s, hours_needed=%s", search_from_h, search_until_h, hours_needed)
+    _LOGGER.info("_select_cheapest_slots: Anzahl geladener Preisdaten: %d", len(rates))
     filtered = 0
     skipped = 0
     for rate in rates:
@@ -217,20 +217,20 @@ def _select_cheapest_slots(
                 price = rate.get("price")
             if price is None:
                 skipped += 1
-                _LOGGER.debug("_select_cheapest_slots: Preis fehlt in Rate: %s", rate)
+                _LOGGER.warning("_select_cheapest_slots: Preis fehlt in Rate: %s", rate)
                 continue
             start_dt = datetime.fromisoformat(start_s)
             end_dt = datetime.fromisoformat(end_s)
         except (KeyError, ValueError, TypeError) as e:
             skipped += 1
-            _LOGGER.debug("_select_cheapest_slots: Fehler beim Parsen einer Rate (%s): %s", rate, e)
+            _LOGGER.warning("_select_cheapest_slots: Fehler beim Parsen einer Rate (%s): %s", rate, e)
             continue
         if start_dt >= window_start_utc and end_dt <= window_end_utc:
             candidates.append({"start": start_dt, "end": end_dt, "price": float(price)})
             filtered += 1
-    _LOGGER.debug("_select_cheapest_slots: %d Rates übersprungen, %d Kandidaten im Zeitfenster gefunden", skipped, filtered)
+    _LOGGER.info("_select_cheapest_slots: %d Rates übersprungen, %d Kandidaten im Zeitfenster gefunden", skipped, filtered)
     if not candidates:
-        _LOGGER.info("_select_cheapest_slots: Keine Kandidaten im Zeitfenster gefunden. (Preisdaten: %d, übersprungen: %d)", len(rates), skipped)
+        _LOGGER.warning("_select_cheapest_slots: Keine Kandidaten im Zeitfenster gefunden. (Preisdaten: %d, übersprungen: %d)", len(rates), skipped)
         return []
 
     # Gruppiere alle Kandidaten nach voller Stunde und berechne den Durchschnittspreis pro Stunde
@@ -526,12 +526,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error("set_timebased_charge: keine aktive KSEM-Integration gefunden")
             return
         windows = call.data["windows"]
-        _LOGGER.debug("set_timebased_charge: empfangene Fenster: %s", windows)
+        _LOGGER.info("set_timebased_charge: empfangene Fenster: %s", windows)
         schedule = _build_timebased_schedule(windows)
         if not schedule:
             _LOGGER.warning("set_timebased_charge: Kein Zeitfenster generiert – Time Mode wird NICHT aktiviert!")
             return
-        _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM", len(schedule))
+        _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM: %s", len(schedule), _windows_to_readable(windows))
         await data["client"].set_timebased_charge(schedule)
         async_dispatcher_send(
             hass, SIGNAL_SCHEDULE_UPDATED, windows, _windows_to_readable(windows)
@@ -543,7 +543,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not data:
             _LOGGER.error("clear_timebased_charge: keine aktive KSEM-Integration gefunden")
             return
-        _LOGGER.info("clear_timebased_charge: setze kompletten Zeitplan zurück")
+        _LOGGER.warning("clear_timebased_charge: setze kompletten Zeitplan zurück")
         await data["client"].clear_timebased_charge()
         # Explizit auf Lock-Mode schalten, damit HA den Zustand korrekt widerspiegelt.
         # Ohne diesen Aufruf bleibt die Wallbox intern im Time-Mode (auch wenn alle
@@ -605,7 +605,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return
 
         windows, readable = _slots_to_windows(slots, mode)
-        _LOGGER.debug("set_cheapest_charge_windows: generierte Fenster: %s", windows)
+        _LOGGER.info("set_cheapest_charge_windows: generierte Fenster: %s", windows)
         schedule = _build_timebased_schedule(windows)
         if not schedule:
             _LOGGER.warning("set_cheapest_charge_windows: Kein gültiger Zeitplan generiert – Time Mode wird NICHT aktiviert! Fenster: %s", windows)

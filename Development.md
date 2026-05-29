@@ -58,10 +58,11 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    1. evcc-URL aus Config-Entry lesen (oder Service-Parameter – überschreibt Config)
    2. `GET /api/tariff/grid` abrufen
    3. Rates auf Suchfenster (`search_from`–`search_until`, Mitternacht-Überspannung möglich) filtern
-   4. Günstigste N Stunden (`hours_needed`) nach Preis aufsteigend sortieren
-   5. UTC-Slots → Lokale Zeit → KSEM-Wochentag (Python 0=Mo → KSEM 0=So, 1=Mo … 6=Sa)
-   6. `set_timebased_charge` mit erzeugten Fenstern aufrufen
-   7. `SIGNAL_SCHEDULE_UPDATED` feuern → `KsemActiveScheduleSensor` aktualisiert sich
+  4. 15-Minuten-Slots werden zu vollen Stundenblöcken aggregiert (KSEM akzeptiert nur volle Stunden)
+  5. Durchschnittspreis pro Stunde berechnen, dann die N günstigsten Stundenblöcke auswählen (keine Duplikate pro Stunde)
+  6. UTC-Slots → Lokale Zeit → KSEM-Wochentag (Python 0=Mo → KSEM 0=So, 1=Mo … 6=Sa)
+  7. `set_timebased_charge` mit erzeugten Fenstern aufrufen
+  8. `SIGNAL_SCHEDULE_UPDATED` feuern → `KsemActiveScheduleSensor` aktualisiert sich
 
    **Config-Flow Schritt 2 (optional, überspringbar):**
    - Felder: `evcc_url`, `evcc_hours_needed` (1–8, default 3),
@@ -69,14 +70,15 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
      `evcc_mode` (grid/pv/hybrid, default grid)
    - URL-Feld leer lassen = Schritt überspringen
 
-   **Wöchentlich wiederkehrender Plan – wichtig für den Betrieb:**
 
-   Der KSEM speichert einen **wöchentlich wiederkehrenden** Zeitplan, keine Einmal-Termine.
-   Wird der Service z. B. am Montag-Abend mit Slots Di 01:00–02:00 und Di 04:00–05:00 aufgerufen,
-   feuert dieser Plan **nächste Woche Dienstag erneut automatisch** – mit den Preisen von letzter Woche.
+  **Wöchentlich wiederkehrender Plan – wichtig für den Betrieb:**
 
-   Empfohlene Betriebsstrategie: Den Service täglich per HA-Automation aufrufen, so dass der Plan
-   jeden Abend mit frischen Preisen überschrieben wird.
+  Der KSEM speichert einen **wöchentlich wiederkehrenden** Zeitplan, keine Einmal-Termine.
+  Wird der Service z. B. am Montag-Abend mit Slots Di 01:00–02:00 und Di 04:00–05:00 aufgerufen,
+  feuert dieser Plan **nächste Woche Dienstag erneut automatisch** – mit den Preisen von letzter Woche.
+
+  **Empfohlene Betriebsstrategie:** Den Service täglich per HA-Automation aufrufen, so dass der Plan
+  jeden Abend mit frischen Preisen überschrieben wird. Beispiel siehe unten.
 
    **Empfohlene HA-Automation:**
 
@@ -107,11 +109,14 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
    - 07:00 Uhr: Plan leeren; KSEM wechselt auf Lock-Mode
    - Kommen keine evcc-Daten → kein Plan, kein Fehler, nur Warning im HA-Log
 
-   **Fehlerbehandlung:**
-   - `evcc_url` fehlt/leer → Warning, kein Schedule, kein Absturz
-   - HTTP-Fehler (Timeout, 4xx/5xx) → Error-Log, kein Schedule
-   - Keine Rates im Suchfenster → Warning, bestehender Schedule bleibt unverändert
-   - Syntaxfehler in einzelnen Rates → betroffener Slot übersprungen, Rest wird verarbeitet
+
+  **Fehlerbehandlung & Logging:**
+  - `evcc_url` fehlt/leer → Warning, kein Schedule, kein Absturz
+  - HTTP-Fehler (Timeout, 4xx/5xx) → Error-Log, kein Schedule
+  - Keine Rates im Suchfenster → Warning, bestehender Schedule bleibt unverändert
+  - Syntaxfehler in einzelnen Rates → betroffener Slot übersprungen, Rest wird verarbeitet
+  - Kein Time Mode mehr ohne gültigen Zeitplan (Schutz gegen leere/lückenhafte Pläne)
+  - Alle kritischen Entscheidungen und Fehlerfälle werden klar im HA-Log dokumentiert
 
    **Status (alpha.14):** Implementiert, Syntaxcheck OK. Noch nicht auf echter Hardware getestet.
 
@@ -119,7 +124,9 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Status Quo (v2.0.0-alpha.10)
 
+
 Die Integration nutzt REST-Polling (zwei Coordinatoren) und Modbus TCP für Energiedaten.
+Polling-Intervalle: Wallbox 60s, Smartmeter 30s, Modbus 10s. Kein dauerhafter WebSocket mehr.
 Der frühere persistente WebSocket für den Lademodus wurde entfernt, da er den
 internen Ladestart des KSEM blockiert hat.
 
