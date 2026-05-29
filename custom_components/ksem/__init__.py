@@ -469,7 +469,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error("set_timebased_charge: keine aktive KSEM-Integration gefunden")
             return
         windows = call.data["windows"]
+        _LOGGER.debug("set_timebased_charge: empfangene Fenster: %s", windows)
         schedule = _build_timebased_schedule(windows)
+        if not schedule:
+            _LOGGER.warning("set_timebased_charge: Kein Zeitfenster generiert – Time Mode wird NICHT aktiviert!")
+            return
         _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM", len(schedule))
         await data["client"].set_timebased_charge(schedule)
         async_dispatcher_send(
@@ -532,7 +536,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         slots = _select_cheapest_slots(rates, search_from_h, search_until_h, hours_needed)
         if not slots:
             _LOGGER.warning(
-                "set_cheapest_charge_windows: Kein Zeitfenster gesetzt. Details siehe vorherige Debug-/Info-Logs (_select_cheapest_slots). "
+                "set_cheapest_charge_windows: Kein Zeitfenster gefunden. Time Mode wird NICHT aktiviert! Details siehe vorherige Debug-/Info-Logs (_select_cheapest_slots). "
                 "Parameter: search_from=%s, search_until=%s, hours_needed=%s, evcc_url=%s, mode=%s, Preisdaten=%d",
                 search_from,
                 search_until,
@@ -544,13 +548,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return
 
         windows, readable = _slots_to_windows(slots, mode)
+        _LOGGER.debug("set_cheapest_charge_windows: generierte Fenster: %s", windows)
+        schedule = _build_timebased_schedule(windows)
+        if not schedule:
+            _LOGGER.warning("set_cheapest_charge_windows: Kein gültiger Zeitplan generiert – Time Mode wird NICHT aktiviert! Fenster: %s", windows)
+            return
         _LOGGER.info(
             "set_cheapest_charge_windows: setze %d Ladefenster: %s",
             len(windows),
             ", ".join(readable),
         )
-
-        schedule = _build_timebased_schedule(windows)
         await int_data["client"].set_timebased_charge(schedule)
         async_dispatcher_send(hass, SIGNAL_SCHEDULE_UPDATED, windows, readable)
 
