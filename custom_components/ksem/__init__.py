@@ -8,6 +8,10 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.components.persistent_notification import (
+    async_create as pn_create,
+    async_dismiss as pn_dismiss,
+)
 from datetime import timedelta
 from .const import DOMAIN, SIGNAL_SCHEDULE_UPDATED
 from .api import KsemClient
@@ -75,32 +79,12 @@ SET_TIMEBASED_SCHEMA = vol.Schema(
 )
 
 
-def _parse_hhmm(time_str: str) -> tuple[int, int]:
-    """Parst 'HH:MM' zu (hour, minute).
-
-    Wirft ValueError wenn Minuten != 0, da der KSEM nur volle Stunden unterstützt.
-    Gilt auch für automatisierte Aufrufe (z. B. Strompreis-Automatisierung).
-    """
-    parts = time_str.split(":")
-    hour = int(parts[0])
-    minute = int(parts[1])
-    if minute != 0:
-        raise ValueError(
-            f"Zeitangabe '{time_str}': Der KSEM unterstützt nur volle Stunden (z. B. '04:00'). "
-            f"Minuten werden vom Gerät ignoriert und müssen 00 sein."
-        )
-    return hour, minute
-
-
-
 # Robuste Zeitfenster-Parsing- und Validierungslogik (ersetzt helper.py-Variante)
 def _build_timebased_schedule(windows: list, logger=None) -> list:
     """
     Konvertiert und validiert Zeitfenster (Mensch-freundlich) in das KSEM-Kantenformat.
     Erkennt 15-Minuten- und 1-Stunden-Takte, loggt/skippt fehlerhafte Fenster, unterstützt Überläufe über Mitternacht.
     """
-    import logging
-    import datetime
     if logger is None:
         logger = _LOGGER
     edges: dict[tuple, int] = {}
@@ -233,29 +217,48 @@ def _select_cheapest_slots(
         _LOGGER.warning("_select_cheapest_slots: Keine Kandidaten im Zeitfenster gefunden. (Preisdaten: %d, übersprungen: %d)", len(rates), skipped)
         return []
 
-    # Gruppiere alle Kandidaten nach voller Stunde und berechne den Durchschnittspreis pro Stunde
+    # Granularität der Eingabedaten ermitteln und loggen
     from collections import defaultdict
-    hour_prices = defaultdict(list)
+    sample_min = int((candidates[0]["end"] - candidates[0]["start"]).total_seconds() // 60)
+    _LOGGER.info(
+        "_select_cheapest_slots: Erkannte Datengranularität: %d Minuten/Slot (%d Kandidaten)",
+        sample_min,
+        len(candidates),
+    )
+
+    # Gruppiere nach voller Stunde – duration-gewichtet, korrekt für 15-min- UND 60-min-Anbieter.
+    # Ein 60-min-Slot (1 Eintrag) und vier 15-min-Slots (4 Einträge à 15 min) werden
+    # identisch behandelt: Preis × Dauer / Gesamtdauer der Stunde.
+    hour_buckets: dict = defaultdict(lambda: {"price_min": 0.0, "total_min": 0})
     for rate in candidates:
-        start = rate["start"]
-        hour = start.replace(minute=0, second=0, microsecond=0)
-        hour_prices[hour].append(rate["price"])
-    # Durchschnittspreis pro Stunde berechnen
-    hour_avg = [(hour, sum(prices)/len(prices)) for hour, prices in hour_prices.items()]
-    # Nach Preis sortieren und die günstigsten N Stunden wählen
+        duration_min = max(1, int((rate["end"] - rate["start"]).total_seconds() // 60))
+        hour = rate["start"].replace(minute=0, second=0, microsecond=0)
+        hour_buckets[hour]["price_min"] += rate["price"] * duration_min
+        hour_buckets[hour]["total_min"] += duration_min
+
+    # Gewichteten Durchschnittspreis pro Stunde berechnen und sortieren
+    hour_avg = [
+        (hour, data["price_min"] / data["total_min"])
+        for hour, data in hour_buckets.items()
+        if data["total_min"] > 0
+    ]
     hour_avg.sort(key=lambda x: x[1])
     best_hours = [h for h, _ in hour_avg[:hours_needed]]
-    # Für jede gewählte Stunde einen Slot zurückgeben (jeweils 1h)
+
     slots = []
     for hour in best_hours:
-        slot = {
+        data = hour_buckets[hour]
+        slots.append({
             "start": hour,
             "end": hour + timedelta(hours=1),
-            "price": sum(hour_prices[hour])/len(hour_prices[hour])
-        }
-        slots.append(slot)
+            "price": data["price_min"] / data["total_min"],
+        })
     if len(slots) < hours_needed:
-        _LOGGER.info("_select_cheapest_slots: Zu wenige Stundenblöcke (%d) für benötigte Stunden (%d)", len(slots), hours_needed)
+        _LOGGER.info(
+            "_select_cheapest_slots: Zu wenige Stundenblöcke (%d) für benötigte Stunden (%d)",
+            len(slots),
+            hours_needed,
+        )
     return slots
 
 
@@ -310,7 +313,7 @@ def _slots_to_windows(slots: list, mode: str) -> tuple[list, list]:
 
         for block_start, block_end, prices in hour_blocks:
             if block_end <= block_start:
-                _LOGGER.warning(f"Verworfenes Zeitfenster (Ende <= Start): {block_start}–{block_end}")
+                _LOGGER.warning("Verworfenes Zeitfenster (Ende <= Start): %s–%s", block_start, block_end)
                 continue
             start_str = f"{block_start.hour:02d}:00"
             end_str = f"{block_end.hour:02d}:00"
@@ -521,34 +524,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def _handle_set_timebased_charge(call):
         """Service ksem.set_timebased_charge – setzt Ladefenster im KSEM."""
-        data = next(iter(hass.data.get(DOMAIN, {}).values()), None)
-        if not data:
+        int_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if not int_data:
             _LOGGER.error("set_timebased_charge: keine aktive KSEM-Integration gefunden")
             return
         windows = call.data["windows"]
-        _LOGGER.info("set_timebased_charge: empfangene Fenster: %s", windows)
         schedule = _build_timebased_schedule(windows)
         if not schedule:
             _LOGGER.warning("set_timebased_charge: Kein Zeitfenster generiert – Time Mode wird NICHT aktiviert!")
             return
-        _LOGGER.info("set_timebased_charge: sende %d Kanten ans KSEM: %s", len(schedule), _windows_to_readable(windows))
-        await data["client"].set_timebased_charge(schedule)
-        async_dispatcher_send(
-            hass, SIGNAL_SCHEDULE_UPDATED, windows, _windows_to_readable(windows)
+        readable = _windows_to_readable(windows)
+        await int_data["client"].set_timebased_charge(schedule)
+        for r in readable:
+            _LOGGER.info("KSEM Ladefenster gesetzt: %s", r)
+        pn_create(
+            hass,
+            message="\n".join(readable),
+            title="KSEM: Ladeplan gesetzt",
+            notification_id="ksem_schedule",
         )
+        async_dispatcher_send(hass, SIGNAL_SCHEDULE_UPDATED, windows, readable)
 
     async def _handle_clear_timebased_charge(call):
         """Service ksem.clear_timebased_charge – setzt Ladeplan auf 'alles aus' und wechselt zurück auf Lock-Mode."""
-        data = next(iter(hass.data.get(DOMAIN, {}).values()), None)
-        if not data:
+        int_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if not int_data:
             _LOGGER.error("clear_timebased_charge: keine aktive KSEM-Integration gefunden")
             return
-        _LOGGER.warning("clear_timebased_charge: setze kompletten Zeitplan zurück")
-        await data["client"].clear_timebased_charge()
+        _LOGGER.info("clear_timebased_charge: setze kompletten Zeitplan zurück")
+        await int_data["client"].clear_timebased_charge()
         # Explizit auf Lock-Mode schalten, damit HA den Zustand korrekt widerspiegelt.
         # Ohne diesen Aufruf bleibt die Wallbox intern im Time-Mode (auch wenn alle
         # Slots auf 0 stehen), und HA zeigt weiterhin den alten Modus.
-        await data["client"].set_charge_mode(mode="lock")
+        await int_data["client"].set_charge_mode(mode="lock")
+        pn_dismiss(hass, notification_id="ksem_schedule")
         async_dispatcher_send(hass, SIGNAL_SCHEDULE_UPDATED, None, None)
 
     async def _handle_set_cheapest_charge_windows(call):
@@ -610,12 +619,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not schedule:
             _LOGGER.warning("set_cheapest_charge_windows: Kein gültiger Zeitplan generiert – Time Mode wird NICHT aktiviert! Fenster: %s", windows)
             return
-        _LOGGER.info(
-            "set_cheapest_charge_windows: setze %d Ladefenster: %s",
-            len(windows),
-            ", ".join(readable),
-        )
         await int_data["client"].set_timebased_charge(schedule)
+        for r in readable:
+            _LOGGER.info("KSEM Ladefenster gesetzt: %s", r)
+        pn_create(
+            hass,
+            message="\n".join(readable),
+            title="KSEM: Ladeplan gesetzt",
+            notification_id="ksem_schedule",
+        )
         async_dispatcher_send(hass, SIGNAL_SCHEDULE_UPDATED, windows, readable)
 
     if not hass.services.has_service(DOMAIN, "set_timebased_charge"):

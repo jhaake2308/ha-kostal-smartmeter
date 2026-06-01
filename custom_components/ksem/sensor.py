@@ -339,6 +339,7 @@ class KsemActiveScheduleSensor(RestoreEntity, SensorEntity):
         self._state: str = "kein Zeitplan"
         self._windows: list = []
         self._readable: list = []
+        self._last_set: str | None = None
         self._unsub = None
 
     async def async_added_to_hass(self) -> None:
@@ -350,6 +351,7 @@ class KsemActiveScheduleSensor(RestoreEntity, SensorEntity):
             attrs = last.attributes or {}
             self._windows = list(attrs.get("fenster", []))
             self._readable = list(attrs.get("fenster_lesbar", []))
+            self._last_set = attrs.get("zuletzt_gesetzt")
         # Dispatcher-Signal abonnieren
         self._unsub = async_dispatcher_connect(
             self.hass, SIGNAL_SCHEDULE_UPDATED, self._handle_update
@@ -365,10 +367,13 @@ class KsemActiveScheduleSensor(RestoreEntity, SensorEntity):
             self._state = "aktiv"
             self._windows = list(windows)
             self._readable = list(readable) if readable else []
+            from homeassistant.util import dt as dt_util
+            self._last_set = dt_util.now().isoformat()
         else:
             self._state = "kein Zeitplan"
             self._windows = []
             self._readable = []
+            self._last_set = None
         self.async_write_ha_state()
 
     @property
@@ -380,5 +385,6 @@ class KsemActiveScheduleSensor(RestoreEntity, SensorEntity):
         return {
             "fenster": self._windows,
             "fenster_lesbar": self._readable,
+            "zuletzt_gesetzt": self._last_set,
         }
 
