@@ -4,6 +4,11 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Todo ##
 
+0) ~~Sensor `Aktive Ladefenster` als Automation-Bedingung nutzbar machen~~ → **DONE (alpha.17, 2026-06-22)**
+   - `KsemActiveScheduleSensor` fehlte `device_class = SensorDeviceClass.ENUM` und `options = ["kein Zeitplan", "aktiv"]`
+   - Ohne diese Attribute behandelt HA den Sensor als generischen Text-Sensor → Zustände nicht als Bedingung auswählbar
+   - Fix: beide Attribute in `__init__()` ergänzt; HA zeigt im Automation-Editor jetzt Dropdown mit den beiden Zuständen
+
 1) ~~"time" modus implementieren~~ → **DONE (alpha.13)**
    - Service `ksem.set_timebased_charge` implementiert (windows-Liste → KSEM-Kantenformat)
    - Service `ksem.clear_timebased_charge` implementiert (alles zurücksetzen)
@@ -183,3 +188,4 @@ internen Ladestart des KSEM blockiert hat.
 - **Wallbox-Protobuf-Stream** (Strom/Spannung je Phase) ist nicht implementiert (`.proto`-Schema nicht vorliegend).
 - **KSEM-Zeitplan ist wöchentlich wiederkehrend** – ohne tägliche HA-Automation (siehe Todo 2) wiederholen sich die gesetzten Fenster jede Woche. Empfehlung: Automation täglich ~21 Uhr (Plan setzen) + ~07 Uhr (Plan leeren).
 - **evcc-Feature noch ungetestet auf echter Hardware** (alpha.14, 2026-05-26).
+- **Aktive-Ladefenster-Sensor als Bedingung**: Fix in alpha.17 – Integration muss nach dem Update in HA neu geladen werden, damit HA den Sensor neu als Enum-Sensor registriert.
