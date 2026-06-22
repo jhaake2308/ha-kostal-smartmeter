@@ -4,10 +4,12 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Todo ##
 
-0) ~~Sensor `Aktive Ladefenster` als Automation-Bedingung nutzbar machen~~ → **DONE (alpha.17, 2026-06-22)**
-   - `KsemActiveScheduleSensor` fehlte `device_class = SensorDeviceClass.ENUM` und `options = ["kein Zeitplan", "aktiv"]`
-   - Ohne diese Attribute behandelt HA den Sensor als generischen Text-Sensor → Zustände nicht als Bedingung auswählbar
-   - Fix: beide Attribute in `__init__()` ergänzt; HA zeigt im Automation-Editor jetzt Dropdown mit den beiden Zuständen
+0) ~~Sensor `Aktive Ladefenster` als Automation-Bedingung nutzbar machen~~ → **DONE (beta.2, 2026-06-22)**
+   - Erster Ansatz: `device_class = SensorDeviceClass.ENUM` + `options` in `KsemActiveScheduleSensor` → HA-Bug in `condition.py` (`UnboundLocalError: state_value`) beim Live-Auswerten unfertiger Bedingungen im UI-Editor (Python 3.14 / HA-intern)
+   - Lösung: neuer `binary_sensor.py` → `KsemScheduleActiveBinarySensor` (`is_on = True` wenn Zeitplan aktiv)
+   - `SIGNAL_SCHEDULE_UPDATED` wird von beiden Entitäten abonniert (Sensor für Details, Binary Sensor für Automation)
+   - `PLATFORMS` in `__init__.py` um `"binary_sensor"` ergänzt
+   - In HA-Automation: Bedingung `binary_sensor.…zeitplan_aktiv` → "ist eingeschaltet" (kein Dropdown, kein Bug)
 
 1) ~~"time" modus implementieren~~ → **DONE (alpha.13)**
    - Service `ksem.set_timebased_charge` implementiert (windows-Liste → KSEM-Kantenformat)

@@ -19,7 +19,7 @@ from .modbus_helper import KsemModbusClient
 import asyncio
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["sensor", "number", "select", "switch", "button"]
+PLATFORMS = ["sensor", "number", "select", "switch", "button", "binary_sensor"]
 
 # --- Zeitbasiertes Laden: Hilfsfunktionen ---
 

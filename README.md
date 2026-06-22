@@ -13,7 +13,7 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 - **Energiedaten via Modbus**: Grid-Leistung, PV, Batterie-SoC, Wallbox-Ladeleistung etc. wieder verfügbar
 - **Zeitbasiertes Laden**: Service `ksem.set_timebased_charge` setzt Ladefenster pro Wochentag und Lademodus; `ksem.clear_timebased_charge` setzt zurück und aktiviert Lock-Mode
 - **Günstigste Ladefenster (evcc)**: Es werden immer die N günstigsten vollen Stunden (egal ob zusammenhängend oder verteilt) als Ladefenster gesetzt. 15-Minuten-Slots werden zu Stundenblöcken aggregiert. Kein Time Mode mehr ohne gültigen Zeitplan.
-- **Aktive-Ladefenster-Sensor**: Zustände `kein Zeitplan` / `aktiv` sind als Bedingung in HA-Automationen auswählbar.
+- **Zeitplan-Sensor & Binary Sensor**: `sensor.…aktive_ladefenster` zeigt Fenster-Details; `binary_sensor.…zeitplan_aktiv` dient als robuste Automation-Bedingung ("ist eingeschaltet").
 - **Logging & Fehlerbehandlung**: Ausführliche Logs bei Problemen, keine Aktivierung des Time Mode ohne gültigen Zeitplan.
 
 
@@ -28,6 +28,7 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 * Auswahl der Phasenumschaltung (1 Phase / 3 Phasen / Automatisch).
 * Zeitbasiertes Laden: Ladefenster per Service setzen (Wochentag als Zahl oder Deutsch, Lademodus pro Fenster).
 * **Automatische Auswahl der günstigsten Ladefenster:** Die Integration wählt die N günstigsten Stundenblöcke im gewünschten Zeitfenster (z.B. 3h zwischen 22 und 6 Uhr). Es werden keine Minuten- oder Halbstundenslots gesetzt, sondern immer volle Stunden.
+* **Binary Sensor `Zeitplan aktiv`:** Einfache `an`/`aus`-Entität für Automation-Bedingungen (z.B. `ksem.clear_timebased_charge` nur ausführen wenn Zeitplan aktiv).
 * **Empfohlene Automation:** Tägliches Überschreiben des Zeitplans per HA-Automation, um wöchentlich wiederkehrende Fenster zu vermeiden und immer aktuelle Preise zu nutzen.
 * **Polling-Intervalle:** Wallbox wird alle 60s, Smartmeter alle 30s, Modbus alle 10s abgefragt.
 * **Erweiterte Fehlerbehandlung und Logging:** Alle kritischen Entscheidungen und Fehlerfälle werden klar im HA-Log dokumentiert.
