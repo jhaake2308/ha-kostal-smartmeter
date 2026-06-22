@@ -336,6 +336,8 @@ class KsemActiveScheduleSensor(RestoreEntity, SensorEntity):
         self._attr_unique_id = f"ksem_{entry_id}_active_schedule"
         self._attr_device_info = device_info
         self._attr_icon = "mdi:calendar-clock"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = ["kein Zeitplan", "aktiv"]
         self._state: str = "kein Zeitplan"
         self._windows: list = []
         self._readable: list = []
