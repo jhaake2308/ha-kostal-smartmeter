@@ -3,7 +3,7 @@
 This is a custom component for Home Assistant to integrate the Kostal Smart Energy Meter (KSEM) and a connected ENECTOR wallbox.
 
 
-## Status (v2.0.0-beta.2)
+## Status (v2.0.0-beta.3)
 
 !! NICHT FÜR PRODUKTIVE NUTZUNG !!
 
@@ -15,6 +15,7 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 - **Günstigste Ladefenster (evcc)**: Es werden immer die N günstigsten vollen Stunden (egal ob zusammenhängend oder verteilt) als Ladefenster gesetzt. 15-Minuten-Slots werden zu Stundenblöcken aggregiert. Kein Time Mode mehr ohne gültigen Zeitplan.
 - **Zeitplan-Sensor & Binary Sensor**: `sensor.…aktive_ladefenster` zeigt Fenster-Details; `binary_sensor.…zeitplan_aktiv` dient als robuste Automation-Bedingung ("ist eingeschaltet").
 - **Logging & Fehlerbehandlung**: Ausführliche Logs bei Problemen, keine Aktivierung des Time Mode ohne gültigen Zeitplan.
+- **Konfiguration nachträglich änderbar**: host, Passwort und alle evcc-Einstellungen können jederzeit über ⋮ → „Neu konfigurieren" angepasst werden; die Integration wird danach automatisch neu geladen.
 
 
 ## Features
@@ -32,6 +33,7 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 * **Empfohlene Automation:** Tägliches Überschreiben des Zeitplans per HA-Automation, um wöchentlich wiederkehrende Fenster zu vermeiden und immer aktuelle Preise zu nutzen.
 * **Polling-Intervalle:** Wallbox wird alle 60s, Smartmeter alle 30s, Modbus alle 10s abgefragt.
 * **Erweiterte Fehlerbehandlung und Logging:** Alle kritischen Entscheidungen und Fehlerfälle werden klar im HA-Log dokumentiert.
+* **Nachträgliche Konfigurationsänderung:** host, Passwort und evcc-Einstellungen können jederzeit über **⋮ → Neu konfigurieren** geändert werden – mit Verbindungstest und automatischem Reload der Integration.
 
 ## Installation via HACS (empfohlen)
 
@@ -50,3 +52,5 @@ Die Kernfunktionalität ist implementiert und wird derzeit getestet:
 1.  **Einstellungen → Geräte & Dienste → Integration hinzufügen**
 2.  Nach **Kostal Smartmeter** suchen
 3.  IP-Adresse des KSEM und Gerätepasswort eingeben
+
+Um die Konfiguration nachträglich zu ändern: **Einstellungen → Geräte & Dienste → KSEM → ⋮ → Neu konfigurieren**

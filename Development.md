@@ -4,6 +4,14 @@ WIE IMMER GILT, ERST REDEN, DANN CODEN!
 
 ## Todo ##
 
+3) ~~Konfiguration nachträglich änderbar machen~~ → **DONE (beta.3, 2026-06-25)**
+   - `async_step_reconfigure` + `async_step_reconfigure_evcc` in `config_flow.py` ergänzt
+   - Erscheint im ⋮-Menü der Integration als „Neu konfigurieren"
+   - Schritt 1: host + password, mit Verbindungstest (wie Ersteinrichtung)
+   - Schritt 2: alle evcc-Einstellungen, vorbelegt mit aktuellen Werten
+   - Nach Speichern: Integration wird automatisch neu geladen (`async_update_reload_and_abort`)
+   - `strings.json` neu angelegt: Schrittbeschreibungen und Feldbezeichnungen auf Deutsch
+
 0) ~~Sensor `Aktive Ladefenster` als Automation-Bedingung nutzbar machen~~ → **DONE (beta.2, 2026-06-22)**
    - Erster Ansatz: `device_class = SensorDeviceClass.ENUM` + `options` in `KsemActiveScheduleSensor` → HA-Bug in `condition.py` (`UnboundLocalError: state_value`) beim Live-Auswerten unfertiger Bedingungen im UI-Editor (Python 3.14 / HA-intern)
    - Lösung: neuer `binary_sensor.py` → `KsemScheduleActiveBinarySensor` (`is_on = True` wenn Zeitplan aktiv)

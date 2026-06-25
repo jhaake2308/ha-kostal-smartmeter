@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Kostal KSEM verbinden",
+        "description": "IP-Adresse und Passwort des Kostal Smart Energy Meters eingeben.",
+        "data": {
+          "host": "IP-Adresse / Hostname",
+          "password": "Gerätepasswort"
+        }
+      },
+      "evcc": {
+        "title": "evcc-Integration (optional)",
+        "description": "evcc-URL leer lassen, um diesen Schritt zu überspringen.",
+        "data": {
+          "evcc_url": "evcc-URL (z. B. http://192.168.1.100:7070)",
+          "evcc_hours_needed": "Benötigte Ladestunden (1–8)",
+          "evcc_search_from": "Suchfenster Beginn (HH:MM)",
+          "evcc_search_until": "Suchfenster Ende (HH:MM)",
+          "evcc_mode": "Lademodus"
+        }
+      },
+      "reconfigure": {
+        "title": "Verbindung neu konfigurieren",
+        "description": "IP-Adresse oder Passwort des KSEM anpassen. Die Verbindung wird vor dem Speichern geprüft.",
+        "data": {
+          "host": "IP-Adresse / Hostname",
+          "password": "Gerätepasswort"
+        }
+      },
+      "reconfigure_evcc": {
+        "title": "evcc-Einstellungen anpassen",
+        "description": "evcc-URL leer lassen, um die evcc-Integration zu deaktivieren.",
+        "data": {
+          "evcc_url": "evcc-URL (z. B. http://192.168.1.100:7070)",
+          "evcc_hours_needed": "Benötigte Ladestunden (1–8)",
+          "evcc_search_from": "Suchfenster Beginn (HH:MM)",
+          "evcc_search_until": "Suchfenster Ende (HH:MM)",
+          "evcc_mode": "Lademodus"
+        }
+      }
+    },
+    "error": {
+      "auth": "Authentifizierung fehlgeschlagen – Passwort prüfen.",
+      "unknown": "Verbindung fehlgeschlagen – IP-Adresse und Erreichbarkeit prüfen."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits konfiguriert.",
+      "reconfigure_successful": "Konfiguration gespeichert. Die Integration wird neu geladen."
+    }
+  }
+}
